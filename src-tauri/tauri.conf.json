@@ -1,0 +1,36 @@
+{
+  "productName": "DeFuDoLog",
+  "version": "2.0.0",
+  "identifier": "com.defudolog.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "DeFuDoLog — Data Leak Detection",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "Plateforme de détection de fuite de données",
+    "longDescription": "DeFuDoLog est une plateforme desktop de détection de fuite de données par analyse multi-couche de logs (parsing, embeddings, clustering, détection d'anomalies)."
+  }
+}

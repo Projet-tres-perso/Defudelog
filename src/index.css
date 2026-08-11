@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-surface-700;
+  }
+
+  body {
+    @apply bg-surface-950 text-surface-100;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-surface-900;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-600 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-surface-500;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface-900 border border-surface-700 rounded-xl p-5 shadow-lg;
+  }
+
+  .card-header {
+    @apply text-sm font-semibold text-surface-300 uppercase tracking-wider mb-4;
+  }
+
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+           transition-all duration-150 ease-out
+           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface-900
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary-600 text-white hover:bg-primary-500 focus:ring-primary-500;
+  }
+
+  .btn-secondary {
+    @apply btn bg-surface-700 text-surface-200 hover:bg-surface-600 focus:ring-surface-500;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600/20 text-red-400 border border-red-600/30 hover:bg-red-600/30;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-surface-400 hover:bg-surface-800 hover:text-surface-200;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-semibold uppercase tracking-wider;
+  }
+
+  .badge-high {
+    @apply badge bg-red-500/15 text-red-400 border border-red-500/30;
+  }
+
+  .badge-moderate {
+    @apply badge bg-amber-500/15 text-amber-400 border border-amber-500/30;
+  }
+
+  .badge-low {
+    @apply badge bg-blue-500/15 text-blue-400 border border-blue-500/30;
+  }
+
+  .badge-benign {
+    @apply badge bg-emerald-500/15 text-emerald-400 border border-emerald-500/30;
+  }
+
+  .input {
+    @apply w-full bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm
+           text-surface-100 placeholder:text-surface-500
+           focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500
+           transition-colors duration-150;
+  }
+
+  .select {
+    @apply input appearance-none cursor-pointer;
+  }
+
+  .log-line {
+    @apply font-mono text-xs leading-relaxed py-1.5 px-3 border-l-2 border-transparent
+           hover:bg-surface-800/50 transition-colors duration-75;
+  }
+
+  .log-line.suspect {
+    @apply border-l-red-500 bg-red-500/5;
+  }
+
+  .log-line.anomaly {
+    @apply border-l-amber-500 bg-amber-500/5;
+  }
+
+  .stat-value {
+    @apply text-2xl font-bold tabular-nums;
+  }
+
+  .stat-label {
+    @apply text-xs text-surface-400 mt-0.5;
+  }
+}

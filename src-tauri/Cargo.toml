@@ -1,0 +1,56 @@
+[package]
+name = "defudolog"
+version = "2.0.0"
+edition = "2021"
+description = "DeFuDoLog — Plateforme de détection de fuite de données par analyse de logs"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled-sqlcipher"] }
+thiserror = "1"
+tokio = { version = "1", features = ["full"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+sha2 = "0.10"
+regex = "1"
+log = "0.4"
+env_logger = "0.11"
+rdev = "0.5"
+notify = { version = "6", features = ["macos_kqueue"] }
+ndarray = "0.15"
+ndarray-rand = "0.14"
+rand = "0.8"
+smartcore = "0.3"         # ML algorithms (Random Forest, DBSCAN, Isolation Forest)
+linfa = "0.7"              # Alternative ML toolkit
+linfa-clustering = "0.7"
+linfa-linear = "0.7"
+ndarray-stats = "0.5"
+parking_lot = "0.12"
+libc = "0.2"
+dirs = "6.0"
+reqwest = { version = "0.12", features = ["json"] }
+
+# Kafka (optional)
+rdkafka = { version = "0.34", features = ["sasl", "ssl"], optional = true }
+
+[features]
+default = []
+kafka = ["rdkafka"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[lib]
+name = "defudolog_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+opt-level = 3
