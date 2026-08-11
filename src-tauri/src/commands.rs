@@ -74,12 +74,10 @@ pub fn delete_log_source(state: State<'_, AppState>, source_id: String) -> Resul
 }
 
 #[tauri::command]
-pub fn auto_discover_host_sources(state: State<'_, AppState>) -> Result<Vec<LogSource>, String> {
+pub fn auto_discover_host_sources(_state: State<'_, AppState>) -> Result<Vec<LogSource>, String> {
     let discovered = crate::collector::LogCollector::discover_local_sources();
-    for source in &discovered {
-        let _ = state.db.insert_log_source(source);
-    }
-    state.db.get_log_sources().map_err(|e| e.to_string())
+    // Suggestion mode: return the discovered sources without inserting them automatically.
+    Ok(discovered)
 }
 
 #[tauri::command]

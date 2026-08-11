@@ -8,6 +8,7 @@ mod siem_exporter;
 mod webhook_notifier;
 mod active_response;
 mod commands;
+mod network;
 
 use db::Database;
 use engine::DetectionPipeline;
@@ -21,6 +22,7 @@ pub struct AppState {
     pub settings: Arc<Mutex<models::AppSettings>>,
     pub syslog_server: Arc<SyslogServer>,
     pub collector: Arc<Mutex<collector::LogCollector>>,
+    pub network_sniffer: Arc<network::NetworkSniffer>,
 }
 
 impl AppState {
@@ -35,12 +37,16 @@ impl AppState {
             log::error!("Erreur au démarrage du LogCollector: {}", e);
         }
 
+        let network_sniffer = Arc::new(network::NetworkSniffer::new(db.clone()));
+        network_sniffer.start();
+
         Ok(Self {
             db,
             engine: Arc::new(Mutex::new(engine)),
             settings: Arc::new(Mutex::new(settings)),
             syslog_server,
             collector: Arc::new(Mutex::new(collector)),
+            network_sniffer,
         })
     }
 }

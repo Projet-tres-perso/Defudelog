@@ -35,6 +35,13 @@ jobs:
       - name: install frontend dependencies
         run: npm install # Ajustez selon votre gestionnaire (yarn install, pnpm install)
 
+      - name: Download and setup Npcap SDK (Windows only)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          Invoke-WebRequest -Uri "https://npcap.com/dist/npcap-sdk-1.13.zip" -OutFile "npcap-sdk.zip"
+          Expand-Archive -Path "npcap-sdk.zip" -DestinationPath "C:\npcap-sdk"
+          echo "LIB=$env:LIB;C:\npcap-sdk\Lib\x64" >> $env:GITHUB_ENV
+
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

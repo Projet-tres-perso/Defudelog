@@ -9,6 +9,7 @@
 
   body {
     @apply bg-surface-950 text-surface-100;
+    background-image: radial-gradient(circle at 50% 0%, #00f0ff05 0%, transparent 50%);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -31,7 +32,7 @@
 
 @layer components {
   .card {
-    @apply bg-surface-900 border border-surface-700 rounded-xl p-5 shadow-lg;
+    @apply bg-surface-900/80 backdrop-blur-md border border-surface-700/50 rounded-xl p-5 shadow-lg shadow-black/60;
   }
 
   .card-header {
@@ -46,7 +47,7 @@
   }
 
   .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-500 focus:ring-primary-500;
+    @apply btn bg-primary-500/10 text-primary-400 border border-primary-500/40 hover:bg-primary-500/20 hover:border-primary-400 hover:shadow-[0_0_15px_rgba(0,240,255,0.25)] focus:ring-primary-500;
   }
 
   .btn-secondary {

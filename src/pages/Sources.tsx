@@ -29,6 +29,7 @@ export default function Sources() {
   const [nodes, setNodes] = useState<NetworkNode[]>([]);
   const [syslogRunning, setSyslogRunning] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [suggestions, setSuggestions] = useState<LogSource[]>([]);
   
   // New Source Form State
   const [newName, setNewName] = useState("");
@@ -75,7 +76,23 @@ export default function Sources() {
 
   const autoDiscover = async () => {
     try {
-      await invoke("auto_discover_host_sources");
+      const discovered = await invoke<LogSource[]>("auto_discover_host_sources");
+      setSuggestions(discovered);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const acceptSuggestion = async (suggestion: LogSource) => {
+    try {
+      await invoke("add_log_source", {
+        name: suggestion.name,
+        sourceType: "file_watcher",
+        hostname: suggestion.hostname,
+        os: suggestion.os,
+        config: suggestion.config,
+      });
+      setSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
       await fetchSources();
     } catch (e) {
       console.error(e);
@@ -219,6 +236,36 @@ export default function Sources() {
                 <span className="badge bg-primary-500/10 text-primary-400 text-2xs">
                   {new Date(node.last_seen).toLocaleTimeString()}
                 </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Suggestions Auto-découverte */}
+      {suggestions.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="font-semibold text-sm text-surface-300 flex items-center gap-2">
+            <Zap size={16} className="text-amber-400" />
+            Sources détectées à configurer ({suggestions.length})
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {suggestions.map((sug) => (
+              <div key={sug.id} className="card flex flex-col justify-between border-amber-500/30 bg-amber-500/5">
+                <div className="mb-3">
+                  <p className="font-medium text-sm text-amber-100">{sug.name}</p>
+                  <p className="text-xs text-surface-400 mt-1 truncate" title={(sug.config as any)?.path as string}>
+                    {((sug.config as any)?.path as string) || formatSourceType(sug.source_type)}
+                  </p>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setSuggestions(prev => prev.filter(s => s.id !== sug.id))} className="btn-ghost text-xs py-1 px-2">
+                    Ignorer
+                  </button>
+                  <button onClick={() => acceptSuggestion(sug)} className="btn-primary text-xs py-1 px-2">
+                    Ajouter
+                  </button>
+                </div>
               </div>
             ))}
           </div>
