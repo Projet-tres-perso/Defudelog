@@ -48,3 +48,5 @@ src-tauri/target/
 
 # Optional: if using Vite/React, avoid committing vite cache
 node_modules/.vite
+
+Analyse_perspective.md
