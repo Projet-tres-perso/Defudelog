@@ -50,3 +50,4 @@ src-tauri/target/
 node_modules/.vite
 
 Analyse_perspective.md
+ARCHITECTURE.md
