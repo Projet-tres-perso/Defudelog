@@ -301,6 +301,21 @@ impl Database {
         Ok(count)
     }
 
+    pub fn insert_log_embedding(&self, embedding: &crate::models::LogEmbedding) -> Result<(), AppError> {
+        let conn = self.conn.lock();
+        let embedding_json = serde_json::to_string(&embedding.embedding)?;
+        conn.execute(
+            "INSERT INTO log_embeddings (id, raw_log_id, embedding_vector)
+             VALUES (?1, ?2, ?3)",
+            params![
+                embedding.id,
+                embedding.raw_log_id,
+                embedding_json,
+            ],
+        )?;
+        Ok(())
+    }
+
     pub fn get_raw_logs(
         &self,
         limit: usize,

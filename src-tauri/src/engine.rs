@@ -6,6 +6,7 @@ use chrono::Utc;
 use sha2::{Sha256, Digest};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
+use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
 
 // ============================================================================
 // 1. PARSER — Drain-like template miner
@@ -293,13 +294,21 @@ impl TimeCorrelator {
         }
     }
 
-    pub fn check(&mut self, log_line: &str, timestamp: i64) -> Option<String> {
+    pub fn check_exponential_decay(&mut self, log_line: &str, timestamp: i64) -> Option<(f64, String)> {
         let pattern = Self::classify_event(log_line);
         let events = self.recent_events.entry(pattern.clone()).or_default();
 
-        // Clean old events
+        let mut decay_score = 0.0;
+        let lambda = 0.05; // Constante de décroissance
+
+        for &old_ts in events.iter() {
+            let dt = (timestamp - old_ts).max(0) as f64;
+            decay_score += (-lambda * dt).exp();
+        }
+
+        // Clean old events (contributing < 0.01)
         while let Some(&old) = events.front() {
-            if timestamp - old > self.window_seconds as i64 {
+            if (timestamp - old) > 300 {
                 events.pop_front();
             } else {
                 break;
@@ -308,12 +317,10 @@ impl TimeCorrelator {
 
         events.push_back(timestamp);
 
-        if events.len() >= self.event_threshold as usize {
-            Some(format!(
-                "{} événements '{}' en {}s",
-                events.len(),
-                pattern,
-                self.window_seconds
+        if decay_score >= (self.event_threshold as f64 * 0.5) {
+            Some((
+                decay_score,
+                format!("Score de densité temporel (Exponential Decay): {:.2} pour '{}'", decay_score, pattern)
             ))
         } else {
             None
@@ -392,7 +399,7 @@ pub fn fuse_scores(
     supervised_score: Option<f64>,
     anomaly_score: Option<f64>,
     rule_count: usize,
-    time_correlation: bool,
+    time_correlation: f64,
     is_outlier: bool,
 ) -> (f64, AlertLevel, Vec<String>) {
     let mut reasons = Vec::new();
@@ -425,11 +432,12 @@ pub fn fuse_scores(
         reasons.push(format!("{} règle(s) déclenchée(s)", rule_count));
     }
 
-    // Time correlation (weight: 0.10)
-    if time_correlation {
-        total += 1.0 * 0.10;
-        weights += 0.10;
-        reasons.push("Corrélation temporelle suspecte".to_string());
+    // Time correlation (weight: 0.15)
+    if time_correlation > 0.0 {
+        let tc_score = (time_correlation / 10.0).min(1.0); // Normalize to [0, 1]
+        total += tc_score * 0.15;
+        weights += 0.15;
+        reasons.push(format!("Corrélation temporelle suspecte: {:.2}", tc_score));
     }
 
     // Outlier (weight: 0.05)
@@ -468,6 +476,8 @@ pub struct DetectionPipeline {
     settings: DetectionSettings,
     supervised_model: Option<SupervisedModel>,
     active_response: crate::active_response::ActiveResponseEngine,
+    text_embedding_model: Option<TextEmbedding>,
+    recent_embeddings: VecDeque<(String, Vec<f64>)>,
 }
 
 #[derive(Clone)]
@@ -508,6 +518,10 @@ impl DetectionPipeline {
         let anomaly_detector = AnomalyDetector::new(50);
         let parser = LogParser::new(10000);
         let rule_engine = RuleEngine::new(&settings);
+        
+        let text_embedding_model = TextEmbedding::try_new(InitOptions::new(EmbeddingModel::BGESmallENV15))
+            .map_err(|e| log::warn!("Impossible de charger le modèle d'embedding BGE: {}", e))
+            .ok();
 
         Self {
             parser,
@@ -518,6 +532,8 @@ impl DetectionPipeline {
             settings,
             supervised_model: None,
             active_response: crate::active_response::ActiveResponseEngine::new(db),
+            text_embedding_model,
+            recent_embeddings: VecDeque::with_capacity(100),
         }
     }
 
@@ -565,9 +581,13 @@ impl DetectionPipeline {
             .map(|(_, l)| l.clone())
             .max_by(|a, b| alert_level_rank(a).cmp(&alert_level_rank(b)));
 
-        // 4. Corrélation temporelle
-        let ts_unix = timestamp.timestamp();
-        let time_correlation = self.time_correlator.check(raw_message, ts_unix);
+        // 4. Time Correlation
+        let mut time_correlation_score = 0.0;
+        let mut time_correlation_reason = None;
+        if let Some((score, reason)) = self.time_correlator.check_exponential_decay(&parsed.template, timestamp.timestamp()) {
+            time_correlation_score = score;
+            time_correlation_reason = Some(reason);
+        }
 
         // 5. Détection d'anomalie basée sur la fréquence des templates
         let freq_count = self.db.get_template_count(&parsed.template)?;
@@ -577,13 +597,61 @@ impl DetectionPipeline {
         let supervised_score = self.supervised_model.as_ref()
             .and_then(|model| model.score(&parsed.template));
 
+        // NOUVEAU: Text Embedding (BGE) via fastembed
+        let mut embedding_vector: Option<Vec<f64>> = None;
+        if let Some(ref mut model) = self.text_embedding_model {
+            if let Ok(mut embeddings) = model.embed(vec![parsed.template.clone()], None) {
+                if let Some(vec_f32) = embeddings.pop() {
+                    let vec_f64: Vec<f64> = vec_f32.into_iter().map(|v| v as f64).collect();
+                    embedding_vector = Some(vec_f64.clone());
+                    
+                    let log_emb = LogEmbedding {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        parsed_log_id: uuid::Uuid::new_v4().to_string(),
+                        raw_log_id: raw_log.id.clone(),
+                        embedding: vec_f64.clone(),
+                        dimension: vec_f64.len() as u32,
+                        created_at: Utc::now(),
+                    };
+                    let _ = self.db.insert_log_embedding(&log_emb);
+                }
+            }
+        }
+
+        // NOUVEAU: Clustering adaptatif HDBSCAN (Online-like)
+        let mut is_outlier = false;
+        if let Some(ref emb) = embedding_vector {
+            self.recent_embeddings.push_back((raw_log.id.clone(), emb.clone()));
+            if self.recent_embeddings.len() > 100 {
+                self.recent_embeddings.pop_front();
+            }
+
+            // Exécuter HDBSCAN sur les embeddings récents (min 20)
+            if self.recent_embeddings.len() >= 20 {
+                // Hdbscan requires data as slices of floats.
+                let data: Vec<Vec<f32>> = self.recent_embeddings.iter()
+                    .map(|(_, v)| v.iter().map(|f| *f as f32).collect())
+                    .collect();
+                
+                // On utilise HDBSCAN avec min_cluster_size
+                if let Ok(clusterer) = hdbscan::Hdbscan::default_hyper_params(&data).cluster() {
+                    if let Some(last_label) = clusterer.last() {
+                        // -1 signifie "bruit" / "outlier"
+                        if *last_label == -1 {
+                            is_outlier = true;
+                        }
+                    }
+                }
+            }
+        }
+
         // 7. Fusion
         let (final_score, level, reasons) = fuse_scores(
             supervised_score,
             anomaly_score,
             rule_matches.len(),
-            time_correlation.is_some(),
-            false, // is_outlier — would come from DBSCAN in real implementation
+            time_correlation_score,
+            is_outlier,
         );
 
         // Add rule reasons
@@ -591,8 +659,8 @@ impl DetectionPipeline {
         for (reason, _) in &rule_matches {
             all_reasons.push(reason.clone());
         }
-        if let Some(ref tc) = time_correlation {
-            all_reasons.push(tc.clone());
+        if let Some(ref tc_reason) = time_correlation_reason {
+            all_reasons.push(tc_reason.clone());
         }
 
         // 8. Créer alerte si nécessaire
