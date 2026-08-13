@@ -52,3 +52,10 @@ node_modules/.vite
 Analyse_perspective.md
 ARCHITECTURE.md
 Manuel.md
+
+# Ignorer les modèles téléchargés (ONNX, fastembed)
+src-tauri/.fastembed_cache/
+
+# Fichiers de backup et de log temporaires
+*copy.md
+*.sh

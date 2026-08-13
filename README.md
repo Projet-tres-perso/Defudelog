@@ -27,7 +27,7 @@ DeFuDoLog v2
 │   ├── DB Layer — SQLite optimisé (WAL, mmap, 12 tables)
 │   ├── Collector — Collecte multi-OS (FileWatcher, Journald, macOS Log, Windows EventLog)
 │   ├── Network — Sniffer réseau passif (pnet) et Syslog (1514)
-│   ├── Engine — Drain-like parser, TF-IDF + RandomForest, DBSCAN, Isolation Forest
+│   ├── Engine — Drain-like parser, ONNX Embeddings (BGE), HDBSCAN, Exponential Decay
 │   └── Commands — API Tauri pour le frontend
 ```
 

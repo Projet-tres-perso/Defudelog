@@ -1,5 +1,6 @@
 import React from "react";
 import { Routes, Route, NavLink, useLocation } from "react-router-dom";
+import logo from "./assets/logo.png";
 import {
   LayoutDashboard,
   ScrollText,
@@ -36,11 +37,9 @@ export default function App() {
       <aside className="w-56 flex-shrink-0 bg-surface-900 border-r border-surface-700 flex flex-col">
         <div className="p-4 border-b border-surface-700">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center">
-              <AlertTriangle size={18} className="text-white" />
-            </div>
+            <img src={logo} alt="DeFuDoLog Logo" className="w-8 h-8 object-contain" />
             <div>
-              <h1 className="text-sm font-bold tracking-tight">DeFuDoLog</h1>
+              <h1 className="text-sm font-bold tracking-tight text-white">DeFuDoLog</h1>
               <p className="text-2xs text-surface-400">Detection Platform</p>
             </div>
           </div>
