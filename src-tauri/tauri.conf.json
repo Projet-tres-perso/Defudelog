@@ -1,7 +1,7 @@
 {
   "productName": "DeFuDoLog",
   "version": "2.0.0",
-  "identifier": "com.defudolog.app",
+  "identifier": "com.defudolog.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",

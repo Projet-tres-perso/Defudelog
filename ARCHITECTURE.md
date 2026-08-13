@@ -13,7 +13,7 @@ DeFuDoLog v2 est une **plateforme desktop cross-platform** de détection de fuit
 | Frontend | **React 18 + TypeScript** | Écosystème mature, typage fort |
 | Base de données | **SQLite (rusqlite)** | Embarquée, zéro config, ACID, WAL |
 | Parsing logs | **Drain-like (Rust)** | Algorithme éprouvé, O(n), porté de Python |
-| ML/Statistique | **smartcore / linfa** | ML en Rust pur, pas de dépendance Python |
+| ML/Statistique | **fastembed (ONNX) / HDBSCAN** | ML natif (BGE-small), Clustering hiérarchique, Exponential Decay |
 | Kafka | **rdkafka** (optionnel) | Feature-gated, bridge entrée/sortie |
 | LLM | Appels HTTP locaux | LM Studio / Ollama compatibles |
 
@@ -53,11 +53,11 @@ DeFuDoLog v2 est une **plateforme desktop cross-platform** de détection de fuit
 Source Logs ──► Collector ──► RawLog ──► Parser (Drain-like) ──► Template
                  (multi-OS)     │                                    │
                                 │                                    ▼
-                                │                           Embedding (TF-IDF)
+                                │                           Embedding (ONNX BGE-small)
                                 │                                    │
                                 │                    ┌───────────────┼───────────────┐
                                 │                    ▼               ▼               ▼
-                                │            Supervised RF    DBSCAN         Isolation Forest
+                                │            Supervised RF        HDBSCAN     Exponential Decay
                                 │                    │               │               │
                                 │                    └───────────────┼───────────────┘
                                 │                                    ▼
@@ -76,43 +76,38 @@ Algorithme inspiré de Drain3, implémenté en Rust pur :
 - Création automatique de nouveaux templates si nécessaire
 - Cache LRU des templates pour limiter la mémoire
 
-### 4.2 Classification supervisée
+### 4.2 Vectorisation (Embeddings BGE via ONNX)
 
-- Vectorisation TF-IDF des templates (n-grams 1-2)
-- Random Forest (100 estimateurs) entraîné sur données étiquetées
-- Seuil ajustable (défaut : 0.6)
-- Réentraînement périodique configurable
+- Utilisation de la librairie `fastembed` (ONNX Runtime).
+- **Initialisation asynchrone** : Le modèle `BAAI/bge-small-en-v1.5` (133 Mo) est téléchargé de manière asynchrone en tâche de fond au premier lancement, sans bloquer l'interface. Un événement Tauri (`ml-loading` / `ml-ready`) informe le frontend.
+- Transforme le texte du log en un vecteur de 384 dimensions.
 
-### 4.3 Clustering DBSCAN
+### 4.3 Clustering HDBSCAN
 
-- Appliqué sur les embeddings TF-IDF
-- Paramètres `eps` et `min_samples` configurables
-- Les outliers (cluster_id = -1) sont marqués comme suspects
-- HDBSCAN envisageable pour évolution future
+- Appliqué sur les embeddings BGE (384D).
+- Paramétrage automatique de la densité (contrairement au DBSCAN classique qui nécessite un `eps` fixe).
+- Les outliers (cluster_id = -1) sont marqués comme suspects.
 
-### 4.4 Détection d'anomalies (Isolation Forest)
+### 4.4 Corrélation Temporelle (Exponential Decay)
 
-- Fenêtre glissante de N logs (par défaut 500)
-- Isolation Forest entraîné sur embeddings du cluster
-- Scores normalisés 0-1
-- Seuil d'anomalie configurable (défaut : 0.3)
+- Remplace les fenêtres glissantes arbitraires.
+- Calcul en flux continu : $e^{-\lambda t}$. Plus les événements du même type s'enchaînent vite, plus le score monte dramatiquement.
+- Seuil d'alerte adaptatif.
 
 ### 4.5 Fusion des scores
 
 $$
-\text{final\_score} = \alpha \cdot \text{supervised\_score} + (1-\alpha) \cdot \text{anomaly\_score}
+\text{final\_score} = f(\text{supervised}, \text{hdbscan}, \text{exponential\_decay}, \text{rules})
 $$
-
-Avec par défaut $$ \alpha = 0.5 $$.
 
 Règles de décision :
 ```
-IF supervised_label = suspect AND is_outlier AND anomaly_score > threshold
+IF final_score >= 0.70
   → alerte_forte
-ELSE IF is_outlier AND anomaly_score > threshold
-  → alerte_suspect
-ELSE IF supervised_label = suspect OR is_outlier
+ELSE IF final_score >= 0.45
   → alerte_moderee
+ELSE IF final_score >= 0.25
+  → alerte_faible
 ELSE
   → benign
 ```

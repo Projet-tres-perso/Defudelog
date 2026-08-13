@@ -15,6 +15,7 @@ use engine::DetectionPipeline;
 use syslog_listener::SyslogServer;
 use parking_lot::Mutex;
 use std::sync::Arc;
+use tauri::Manager;
 
 pub struct AppState {
     pub db: Arc<Database>,
@@ -26,10 +27,10 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(db_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(db_path: &str, app_handle: tauri::AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
         let db = Arc::new(Database::new(db_path)?);
         let settings = models::AppSettings::default();
-        let engine = DetectionPipeline::new(db.clone(), settings.detection.clone());
+        let engine = DetectionPipeline::new(db.clone(), settings.detection.clone(), app_handle.clone());
         let syslog_server = Arc::new(SyslogServer::new(db.clone(), 1514));
         
         let mut collector = collector::LogCollector::new(db.clone());
@@ -37,7 +38,7 @@ impl AppState {
             log::error!("Erreur au démarrage du LogCollector: {}", e);
         }
 
-        let network_sniffer = Arc::new(network::NetworkSniffer::new(db.clone()));
+        let network_sniffer = Arc::new(network::NetworkSniffer::new(db.clone(), app_handle.clone()));
         network_sniffer.start();
 
         Ok(Self {
@@ -71,14 +72,16 @@ pub fn run() {
     let db_path = get_db_path();
     log::info!("Base de données SQLite initialisée dans: {}", db_path);
 
-    let app_state = AppState::new(&db_path)
-        .expect("Failed to initialize application state");
-
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .manage(app_state)
+        .setup(move |app| {
+            let app_handle = app.handle().clone();
+            let app_state = AppState::new(&db_path, app_handle).expect("Failed to initialize application state");
+            app.manage(app_state);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::add_log_source,
             commands::list_log_sources,

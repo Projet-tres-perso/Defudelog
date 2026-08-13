@@ -476,7 +476,7 @@ pub struct DetectionPipeline {
     settings: DetectionSettings,
     supervised_model: Option<SupervisedModel>,
     active_response: crate::active_response::ActiveResponseEngine,
-    text_embedding_model: Option<TextEmbedding>,
+    text_embedding_model: Arc<parking_lot::Mutex<Option<TextEmbedding>>>,
     recent_embeddings: VecDeque<(String, Vec<f64>)>,
 }
 
@@ -510,7 +510,7 @@ impl SupervisedModel {
 }
 
 impl DetectionPipeline {
-    pub fn new(db: Arc<Database>, settings: DetectionSettings) -> Self {
+    pub fn new(db: Arc<Database>, settings: DetectionSettings, app_handle: tauri::AppHandle) -> Self {
         let correlator = TimeCorrelator::new(
             settings.time_window_seconds,
             settings.event_threshold,
@@ -519,9 +519,24 @@ impl DetectionPipeline {
         let parser = LogParser::new(10000);
         let rule_engine = RuleEngine::new(&settings);
         
-        let text_embedding_model = TextEmbedding::try_new(InitOptions::new(EmbeddingModel::BGESmallENV15))
-            .map_err(|e| log::warn!("Impossible de charger le modèle d'embedding BGE: {}", e))
-            .ok();
+        let text_embedding_model = Arc::new(parking_lot::Mutex::new(None));
+        let model_clone = text_embedding_model.clone();
+        
+        std::thread::spawn(move || {
+            use tauri::Emitter;
+            let _ = app_handle.emit("ml-loading", ());
+            
+            match TextEmbedding::try_new(InitOptions::new(EmbeddingModel::BGESmallENV15)) {
+                Ok(model) => {
+                    *model_clone.lock() = Some(model);
+                    let _ = app_handle.emit("ml-ready", ());
+                }
+                Err(e) => {
+                    log::warn!("Impossible de charger le modèle d'embedding BGE: {}", e);
+                    let _ = app_handle.emit("ml-error", e.to_string());
+                }
+            }
+        });
 
         Self {
             parser,
@@ -599,7 +614,7 @@ impl DetectionPipeline {
 
         // NOUVEAU: Text Embedding (BGE) via fastembed
         let mut embedding_vector: Option<Vec<f64>> = None;
-        if let Some(ref mut model) = self.text_embedding_model {
+        if let Some(ref mut model) = *self.text_embedding_model.lock() {
             if let Ok(mut embeddings) = model.embed(vec![parsed.template.clone()], None) {
                 if let Some(vec_f32) = embeddings.pop() {
                     let vec_f64: Vec<f64> = vec_f32.into_iter().map(|v| v as f64).collect();

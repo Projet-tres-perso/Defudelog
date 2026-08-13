@@ -14,15 +14,17 @@ use uuid::Uuid;
 
 pub struct NetworkSniffer {
     db: Arc<Database>,
+    app_handle: tauri::AppHandle,
 }
 
 impl NetworkSniffer {
-    pub fn new(db: Arc<Database>) -> Self {
-        Self { db }
+    pub fn new(db: Arc<Database>, app_handle: tauri::AppHandle) -> Self {
+        Self { db, app_handle }
     }
 
     pub fn start(&self) {
         let db = self.db.clone();
+        let app_handle = self.app_handle.clone();
         
         thread::spawn(move || {
             let interfaces = datalink::interfaces();
@@ -51,6 +53,8 @@ impl NetworkSniffer {
                     Ok(_) => log::error!("Type de canal non supporté"),
                     Err(e) => {
                         log::warn!("Erreur de capture réseau (Privilèges administrateur requis?): {}", e);
+                        use tauri::Emitter;
+                        let _ = app_handle.emit("network-error", "Privilèges administrateur (Root/Sudo) requis pour la capture réseau.");
                     }
                 }
             } else {

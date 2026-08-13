@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Routes, Route, NavLink, useLocation } from "react-router-dom";
+import { listen } from "@tauri-apps/api/event";
 import logo from "./assets/logo.png";
 import {
   LayoutDashboard,
@@ -30,9 +31,54 @@ const navItems = [
 
 export default function App() {
   const location = useLocation();
+  const [mlStatus, setMlStatus] = useState<"loading" | "ready" | "error">("ready");
+  const [networkError, setNetworkError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unlistenLoading = listen("ml-loading", () => setMlStatus("loading"));
+    const unlistenReady = listen("ml-ready", () => setMlStatus("ready"));
+    const unlistenError = listen("ml-error", (e) => {
+      setMlStatus("error");
+      console.error(e);
+    });
+    const unlistenNetwork = listen("network-error", (e) => {
+      setNetworkError(e.payload as string);
+    });
+
+    return () => {
+      unlistenLoading.then(f => f());
+      unlistenReady.then(f => f());
+      unlistenError.then(f => f());
+      unlistenNetwork.then(f => f());
+    };
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {/* Overlays and Toasts */}
+      {mlStatus === "loading" && (
+        <div className="fixed inset-0 bg-surface-950/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-surface-900 border border-surface-700 p-6 rounded-xl max-w-md w-full text-center shadow-2xl">
+            <div className="w-12 h-12 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin mx-auto mb-4"></div>
+            <h3 className="text-lg font-bold text-white mb-2">Initialisation de l'IA</h3>
+            <p className="text-sm text-surface-400">
+              Chargement du modèle ONNX (BGE-small). Lors du premier lancement, le modèle (133 Mo) est automatiquement téléchargé en tâche de fond. Veuillez patienter...
+            </p>
+          </div>
+        </div>
+      )}
+
+      {networkError && (
+        <div className="fixed bottom-4 right-4 z-50 bg-red-900/90 border border-red-500/50 text-white p-4 rounded-lg shadow-lg flex items-start max-w-sm animate-fade-in">
+          <AlertTriangle className="w-5 h-5 text-red-400 mr-3 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h4 className="font-bold text-sm mb-1">Privilèges Insuffisants</h4>
+            <p className="text-xs text-red-200">{networkError}</p>
+          </div>
+          <button onClick={() => setNetworkError(null)} className="ml-3 text-red-300 hover:text-white transition-colors">✕</button>
+        </div>
+      )}
+
       {/* Sidebar */}
       <aside className="w-56 flex-shrink-0 bg-surface-900 border-r border-surface-700 flex flex-col">
         <div className="p-4 border-b border-surface-700">
