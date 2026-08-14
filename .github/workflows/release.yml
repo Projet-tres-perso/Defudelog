@@ -52,15 +52,22 @@ jobs:
         if: matrix.platform == 'windows-latest'
         run: |
           choco install openssl --x64 -y
-          $opensslDir = "C:\Program Files\OpenSSL-Win64"
-          # Choco place les libs dans lib\VC\x64 ou lib\VC selon la version
-          if (Test-Path "$opensslDir\lib\VC\x64") {
-            $libDir = "$opensslDir\lib\VC\x64"
-          } elseif (Test-Path "$opensslDir\lib\VC") {
-            $libDir = "$opensslDir\lib\VC"
-          } else {
-            $libDir = "$opensslDir\lib"
-          }
+          # Détecter le répertoire d'installation (varie selon la version de choco/openssl)
+          $candidates = @(
+            "C:\Program Files\OpenSSL",
+            "C:\Program Files\OpenSSL-Win64"
+          )
+          $opensslDir = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $opensslDir) { throw "OpenSSL installation directory not found" }
+          echo "OpenSSL found at: $opensslDir"
+          # Chercher le dossier contenant les .lib
+          $libCandidates = @(
+            "$opensslDir\lib\VC\x64",
+            "$opensslDir\lib\VC",
+            "$opensslDir\lib"
+          )
+          $libDir = $libCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $libDir) { throw "OpenSSL lib directory not found" }
           echo "OPENSSL_LIB_DIR=$libDir" >> $env:GITHUB_ENV
           echo "OPENSSL_INCLUDE_DIR=$opensslDir\include" >> $env:GITHUB_ENV
           echo "OPENSSL_DIR=$opensslDir" >> $env:GITHUB_ENV
