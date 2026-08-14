@@ -9,6 +9,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    timeout-minutes: 60 # fastembed/ONNX Runtime peut prendre du temps à compiler
 
     strategy:
       fail-fast: false
@@ -28,19 +29,29 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev
 
       - name: install frontend dependencies
-        run: npm install # Ajustez selon votre gestionnaire (yarn install, pnpm install)
+        run: npm install
 
-      - name: Download and setup Npcap SDK (Windows only)
+      - name: Install Npcap SDK and Runtime (Windows only)
         if: matrix.platform == 'windows-latest'
         run: |
+          # Installer le SDK (headers + libs pour la compilation)
           Invoke-WebRequest -Uri "https://npcap.com/dist/npcap-sdk-1.13.zip" -OutFile "npcap-sdk.zip"
           Expand-Archive -Path "npcap-sdk.zip" -DestinationPath "C:\npcap-sdk"
           echo "LIB=$env:LIB;C:\npcap-sdk\Lib\x64" >> $env:GITHUB_ENV
+
+          # Installer le runtime Npcap (nécessaire pour le linking de pnet)
+          Invoke-WebRequest -Uri "https://npcap.com/dist/npcap-1.80-oem.exe" -OutFile "npcap-installer.exe"
+          Start-Process -FilePath ".\npcap-installer.exe" -ArgumentList "/S", "/winpcap_mode=yes" -Wait
 
       - name: Install OpenSSL (Windows only)
         if: matrix.platform == 'windows-latest'
@@ -48,7 +59,7 @@ jobs:
           choco install openssl --x64 -y
           echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
 
-      - uses: tauri-apps/tauri-action@v1
+      - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
