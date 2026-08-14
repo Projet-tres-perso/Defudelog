@@ -71,6 +71,8 @@ jobs:
           echo "OPENSSL_LIB_DIR=$libDir" >> $env:GITHUB_ENV
           echo "OPENSSL_INCLUDE_DIR=$opensslDir\include" >> $env:GITHUB_ENV
           echo "OPENSSL_DIR=$opensslDir" >> $env:GITHUB_ENV
+          # Ajouter au LIB pour que le linker MSVC trouve libcrypto.lib et libssl.lib
+          echo "LIB=$env:LIB;$libDir" >> $env:GITHUB_ENV
           echo "Detected OpenSSL lib dir: $libDir"
           Get-ChildItem $libDir
 
