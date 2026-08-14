@@ -52,7 +52,20 @@ jobs:
         if: matrix.platform == 'windows-latest'
         run: |
           choco install openssl --x64 -y
-          echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
+          $opensslDir = "C:\Program Files\OpenSSL-Win64"
+          # Choco place les libs dans lib\VC\x64 ou lib\VC selon la version
+          if (Test-Path "$opensslDir\lib\VC\x64") {
+            $libDir = "$opensslDir\lib\VC\x64"
+          } elseif (Test-Path "$opensslDir\lib\VC") {
+            $libDir = "$opensslDir\lib\VC"
+          } else {
+            $libDir = "$opensslDir\lib"
+          }
+          echo "OPENSSL_LIB_DIR=$libDir" >> $env:GITHUB_ENV
+          echo "OPENSSL_INCLUDE_DIR=$opensslDir\include" >> $env:GITHUB_ENV
+          echo "OPENSSL_DIR=$opensslDir" >> $env:GITHUB_ENV
+          echo "Detected OpenSSL lib dir: $libDir"
+          Get-ChildItem $libDir
 
       - uses: tauri-apps/tauri-action@v0
         env:
