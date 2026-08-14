@@ -41,17 +41,12 @@ jobs:
       - name: install frontend dependencies
         run: npm install
 
-      - name: Install Npcap SDK and Runtime (Windows only)
+      - name: Install Npcap SDK (Windows only)
         if: matrix.platform == 'windows-latest'
         run: |
-          # Installer le SDK (headers + libs pour la compilation)
           Invoke-WebRequest -Uri "https://npcap.com/dist/npcap-sdk-1.13.zip" -OutFile "npcap-sdk.zip"
           Expand-Archive -Path "npcap-sdk.zip" -DestinationPath "C:\npcap-sdk"
           echo "LIB=$env:LIB;C:\npcap-sdk\Lib\x64" >> $env:GITHUB_ENV
-
-          # Installer le runtime Npcap (nécessaire pour le linking de pnet)
-          Invoke-WebRequest -Uri "https://npcap.com/dist/npcap-1.80-oem.exe" -OutFile "npcap-installer.exe"
-          Start-Process -FilePath ".\npcap-installer.exe" -ArgumentList "/S", "/winpcap_mode=yes" -Wait
 
       - name: Install OpenSSL (Windows only)
         if: matrix.platform == 'windows-latest'
