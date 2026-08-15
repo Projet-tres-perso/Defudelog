@@ -217,16 +217,13 @@ pub fn list_rules(state: State<'_, AppState>) -> Result<Vec<DetectionRule>, Stri
 }
 
 #[tauri::command]
-pub fn toggle_rule(state: State<'_, AppState>, rule_id: String, _enabled: bool) -> Result<(), String> {
-    // Simplified: just acknowledge
-    let _ = (state, rule_id);
-    Ok(())
+pub fn toggle_rule(state: State<'_, AppState>, rule_id: String, enabled: bool) -> Result<(), String> {
+    state.db.update_rule_enabled(&rule_id, enabled).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn delete_rule(state: State<'_, AppState>, rule_id: String) -> Result<(), String> {
-    let _ = (state, rule_id);
-    Ok(())
+    state.db.delete_rule(&rule_id).map_err(|e| e.to_string())
 }
 
 // ─── Settings ──────────────────────────────────────
@@ -247,11 +244,11 @@ pub fn update_settings(state: State<'_, AppState>, settings: AppSettings) -> Res
 // ─── Context & Templates ───────────────────────────
 
 #[tauri::command]
-pub fn get_log_context(state: State<'_, AppState>, _log_id: String,
-    _before: Option<usize>, _after: Option<usize>) -> Result<Vec<RawLog>, String>
+pub fn get_log_context(state: State<'_, AppState>, log_id: String,
+    before: Option<usize>, _after: Option<usize>) -> Result<Vec<RawLog>, String>
 {
-    let (logs, _) = state.db.get_raw_logs(20, 0, None, None).map_err(|e| e.to_string())?;
-    Ok(logs)
+    let limit = before.unwrap_or(10);
+    state.db.get_log_context_neighbors(&log_id, None, None, limit).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

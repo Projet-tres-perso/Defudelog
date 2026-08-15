@@ -119,6 +119,8 @@ impl Database {
                 level TEXT NOT NULL DEFAULT 'low',
                 reasons TEXT NOT NULL DEFAULT '[]',
                 context_logs TEXT NOT NULL DEFAULT '[]',
+                llm_explanation TEXT,
+                mitigation_suggestion TEXT,
                 detected_at TEXT NOT NULL,
                 acknowledged INTEGER NOT NULL DEFAULT 0,
                 acknowledged_at TEXT,
@@ -152,6 +154,11 @@ impl Database {
                 value TEXT NOT NULL
             );
         ")?;
+
+        // Safe column additions for existing databases
+        let _ = conn.execute("ALTER TABLE alerts ADD COLUMN llm_explanation TEXT", []);
+        let _ = conn.execute("ALTER TABLE alerts ADD COLUMN mitigation_suggestion TEXT", []);
+
         Ok(())
     }
 
@@ -367,8 +374,8 @@ impl Database {
         conn.execute(
             "INSERT OR REPLACE INTO alerts (id, raw_log_id, parsed_log_id, template, category, supervised_score,
              anomaly_score, cluster_id, is_outlier, final_score, level, reasons, context_logs,
-             detected_at, acknowledged, acknowledged_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+             llm_explanation, mitigation_suggestion, detected_at, acknowledged, acknowledged_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
                 alert.id,
                 alert.raw_log_id,
@@ -383,6 +390,8 @@ impl Database {
                 alert.level.to_string(),
                 serde_json::to_string(&alert.reasons)?,
                 serde_json::to_string(&alert.context_logs)?,
+                alert.llm_explanation,
+                alert.mitigation_suggestion,
                 alert.detected_at.to_rfc3339(),
                 alert.acknowledged as i32,
                 alert.acknowledged_at.as_ref().map(|d| d.to_rfc3339()),
@@ -422,7 +431,7 @@ impl Database {
         let mut stmt = conn.prepare(&format!(
             "SELECT id, raw_log_id, parsed_log_id, template, category, supervised_score, anomaly_score,
              cluster_id, is_outlier, final_score, level, reasons, context_logs,
-             detected_at, acknowledged, acknowledged_at
+             llm_explanation, mitigation_suggestion, detected_at, acknowledged, acknowledged_at
              FROM alerts {} ORDER BY detected_at DESC LIMIT ?1 OFFSET ?2",
             where_clause
         ))?;
@@ -445,14 +454,91 @@ impl Database {
                 level: parse_alert_level(&row.get::<_, String>(10)?),
                 reasons: serde_json::from_str(&reasons_str).unwrap_or_default(),
                 context_logs: serde_json::from_str(&context_str).unwrap_or_default(),
-                detected_at: parse_datetime(&row.get::<_, String>(13)?),
-                acknowledged: row.get::<_, i32>(14)? != 0,
-                acknowledged_at: row.get::<_, Option<String>>(15)?.map(|s| parse_datetime(&s)),
+                llm_explanation: row.get(13)?,
+                mitigation_suggestion: row.get(14)?,
+                detected_at: parse_datetime(&row.get::<_, String>(15)?),
+                acknowledged: row.get::<_, i32>(16)? != 0,
+                acknowledged_at: row.get::<_, Option<String>>(17)?.map(|s| parse_datetime(&s)),
             })
         })?;
 
         let alerts: Vec<Alert> = rows.filter_map(|r| r.ok()).collect();
         Ok((alerts, count))
+    }
+
+    /// Récupère les logs voisins chronologiques (fenêtre glissante ± limit logs sur le même hôte/source)
+    pub fn get_log_context_neighbors(
+        &self,
+        raw_log_id: &str,
+        hostname: Option<&str>,
+        timestamp: Option<chrono::DateTime<chrono::Utc>>,
+        limit: usize,
+    ) -> Result<Vec<RawLog>, AppError> {
+        let conn = self.conn.lock();
+        let ts_str = timestamp.map(|t| t.to_rfc3339()).unwrap_or_else(|| {
+            conn.query_row(
+                "SELECT timestamp FROM raw_logs WHERE id = ?1",
+                params![raw_log_id],
+                |r| r.get(0),
+            ).unwrap_or_else(|_| chrono::Utc::now().to_rfc3339())
+        });
+
+        let host_filter = if let Some(h) = hostname {
+            format!("AND hostname = '{}'", h)
+        } else {
+            String::new()
+        };
+
+        // Logs précédents
+        let mut before_stmt = conn.prepare(&format!(
+            "SELECT id, source_id, hostname, raw_message, log_hash, timestamp, ingested_at
+             FROM raw_logs
+             WHERE timestamp <= ?1 {}
+             ORDER BY timestamp DESC LIMIT ?2",
+            host_filter
+        ))?;
+
+        let before_rows = before_stmt.query_map(params![ts_str, limit as i64], |row| {
+            Ok(RawLog {
+                id: row.get(0)?,
+                source_id: row.get(1)?,
+                hostname: row.get(2)?,
+                raw_message: row.get(3)?,
+                log_hash: row.get(4)?,
+                timestamp: parse_datetime(&row.get::<_, String>(5)?),
+                ingested_at: parse_datetime(&row.get::<_, String>(6)?),
+            })
+        })?;
+
+        let mut logs: Vec<RawLog> = before_rows.filter_map(|r| r.ok()).collect();
+        logs.reverse(); // Ordre chronologique
+
+        // Logs suivants
+        let mut after_stmt = conn.prepare(&format!(
+            "SELECT id, source_id, hostname, raw_message, log_hash, timestamp, ingested_at
+             FROM raw_logs
+             WHERE timestamp > ?1 {}
+             ORDER BY timestamp ASC LIMIT ?2",
+            host_filter
+        ))?;
+
+        let after_rows = after_stmt.query_map(params![ts_str, limit as i64], |row| {
+            Ok(RawLog {
+                id: row.get(0)?,
+                source_id: row.get(1)?,
+                hostname: row.get(2)?,
+                raw_message: row.get(3)?,
+                log_hash: row.get(4)?,
+                timestamp: parse_datetime(&row.get::<_, String>(5)?),
+                ingested_at: parse_datetime(&row.get::<_, String>(6)?),
+            })
+        })?;
+
+        for r in after_rows.filter_map(|r| r.ok()) {
+            logs.push(r);
+        }
+
+        Ok(logs)
     }
 
     pub fn get_network_nodes(&self) -> Result<Vec<NetworkNode>, AppError> {
@@ -655,6 +741,21 @@ impl Database {
                 rule.enabled as i32,
                 rule.created_at.to_rfc3339(),
             ],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_rule(&self, id: &str) -> Result<(), AppError> {
+        let conn = self.conn.lock();
+        conn.execute("DELETE FROM detection_rules WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn update_rule_enabled(&self, id: &str, enabled: bool) -> Result<(), AppError> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE detection_rules SET enabled = ?1 WHERE id = ?2",
+            params![enabled as i32, id],
         )?;
         Ok(())
     }

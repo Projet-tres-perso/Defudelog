@@ -146,6 +146,8 @@ pub struct Alert {
     pub level: AlertLevel,
     pub reasons: Vec<String>,
     pub context_logs: Vec<String>,
+    pub llm_explanation: Option<String>,
+    pub mitigation_suggestion: Option<String>,
     pub detected_at: DateTime<Utc>,
     pub acknowledged: bool,
     pub acknowledged_at: Option<DateTime<Utc>>,

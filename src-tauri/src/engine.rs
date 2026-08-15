@@ -5,43 +5,105 @@ use crate::models::*;
 use chrono::Utc;
 use sha2::{Sha256, Digest};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
 
 // ============================================================================
-// 1. PARSER — Drain-like template miner
+// 1. REGEX PRE-COMPILATION (Performance & Zero Allocation in Hot Path)
 // ============================================================================
 
-/// Paramètres de parsing
-const PARAM_PATTERNS: &[(&str, &str)] = &[
-    (r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "<IP>"),
-    (r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b", "<UUID>"),
-    (r"\b[0-9a-fA-F]{40,128}\b", "<HASH>"),
-    (r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", "<DATETIME>"),
-    (r"\b\d{4}-\d{2}-\d{2}\b", "<DATE>"),
-    (r"\b\d{2}:\d{2}:\d{2}\b", "<TIME>"),
-    (r"\b\d+\b", "<NUM>"),
-    (r"(?<=/)[^/\s]+(?:\.[a-zA-Z0-9]+)?(?=\s|$)", "<FILE>"),
-];
+struct CompiledPattern {
+    regex: regex::Regex,
+    replacement: &'static str,
+}
+
+static PARAM_PATTERNS: LazyLock<Vec<CompiledPattern>> = LazyLock::new(|| {
+    vec![
+        CompiledPattern { regex: regex::Regex::new(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b").unwrap(), replacement: "<IP>" },
+        CompiledPattern { regex: regex::Regex::new(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b").unwrap(), replacement: "<UUID>" },
+        CompiledPattern { regex: regex::Regex::new(r"\b[0-9a-fA-F]{40,128}\b").unwrap(), replacement: "<HASH>" },
+        CompiledPattern { regex: regex::Regex::new(r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?").unwrap(), replacement: "<DATETIME>" },
+        CompiledPattern { regex: regex::Regex::new(r"\b\d{4}-\d{2}-\d{2}\b").unwrap(), replacement: "<DATE>" },
+        CompiledPattern { regex: regex::Regex::new(r"\b\d{2}:\d{2}:\d{2}\b").unwrap(), replacement: "<TIME>" },
+        CompiledPattern { regex: regex::Regex::new(r"\b\d+\b").unwrap(), replacement: "<NUM>" },
+        CompiledPattern { regex: regex::Regex::new(r"(?<=/)[^/\s]+(?:\.[a-zA-Z0-9]+)?(?=\s|$)").unwrap(), replacement: "<FILE>" },
+    ]
+});
+
+static DLP_SIGNATURES: LazyLock<Vec<(regex::Regex, &'static str, AlertLevel)>> = LazyLock::new(|| {
+    vec![
+        (
+            regex::Regex::new(r"(?i)-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----").unwrap(),
+            "Clé privée RSA / SSH exposée dans les logs",
+            AlertLevel::High,
+        ),
+        (
+            regex::Regex::new(r"(?i)(?:api[_-]?key|access[_-]?token|bearer\s+[a-z0-9_\-\.]{20,})").unwrap(),
+            "Token API ou secret d'accès exposé",
+            AlertLevel::High,
+        ),
+        (
+            regex::Regex::new(r"(?i)(?:password|passwd|pwd)\s*[=:]\s*['\x22]?\S{4,}").unwrap(),
+            "Mot de passe en clair détecté",
+            AlertLevel::High,
+        ),
+        (
+            regex::Regex::new(r"(?i)(?:exfiltration|data_leak|dump\.csv|customer_records|database_dump)").unwrap(),
+            "Indicateur explicite d'exfiltration ou de fuite de données",
+            AlertLevel::High,
+        ),
+        (
+            regex::Regex::new(r"(?i)cmd=vi\s+/etc/(?:passwd|shadow|sudoers)").unwrap(),
+            "Tentative de modification directe des fichiers d'authentification système",
+            AlertLevel::High,
+        ),
+        (
+            regex::Regex::new(r"(?i)(?:chmod\s+777|chown\s+root)\s+/etc/").unwrap(),
+            "Élévation de privilèges ou altération de permissions critiques",
+            AlertLevel::High,
+        ),
+        (
+            regex::Regex::new(r"(?i)(?:curl|wget)\s+.*\|\s*(?:sh|bash|zsh)").unwrap(),
+            "Exécution suspecte de script distant via pipe (Remote Code Execution)",
+            AlertLevel::High,
+        ),
+    ]
+});
+
+// ============================================================================
+// 2. DRAIN-LIKE LOG PARSER (Structure Mining & Template Catalog)
+// ============================================================================
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TemplateClass {
+    CriticalThreat,
+    WarningAnomaly,
+    StandardOperational,
+}
+
+#[derive(Debug, Clone)]
+pub struct TemplateInfo {
+    pub id: u64,
+    pub template: String,
+    pub count: u64,
+    pub classification: TemplateClass,
+    pub is_new: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParsedResult {
+    pub template: String,
+    pub template_id: u64,
+    pub parameters: Vec<String>,
+    pub cleaned_log: String,
+    pub classification: TemplateClass,
+    pub is_new: bool,
+}
 
 #[derive(Debug, Clone)]
 pub struct LogParser {
     templates: HashMap<String, TemplateInfo>,
     max_templates: usize,
-}
-
-#[derive(Debug, Clone)]
-struct TemplateInfo {
-    id: u64,
-    template: String,
-    count: u64,
-    tokens: Vec<TokenKind>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum TokenKind {
-    Literal(String),
-    Param(String), // e.g., "<NUM>", "<IP>"
 }
 
 impl LogParser {
@@ -52,19 +114,12 @@ impl LogParser {
         }
     }
 
-    /// Parse un log brut → template + paramètres
+    /// Extrait la structure abstraite (template) du log brut
     pub fn parse(&mut self, raw_message: &str) -> ParsedResult {
         let tokens = Self::tokenize(raw_message);
         let template_str = Self::build_template_string(&tokens);
-        let cleaned_log = tokens.iter()
-            .map(|t| match t {
-                TokenKind::Literal(s) => s.clone(),
-                TokenKind::Param(p) => p.clone(),
-            })
-            .collect::<Vec<_>>()
-            .join("");
+        let cleaned_log = template_str.clone();
 
-        let template_id = self.get_or_create_template(&template_str);
         let params: Vec<String> = tokens.iter()
             .filter_map(|t| match t {
                 TokenKind::Literal(_) => None,
@@ -72,11 +127,15 @@ impl LogParser {
             })
             .collect();
 
+        let (template_id, classification, is_new) = self.get_or_register_template(&template_str);
+
         ParsedResult {
             template: template_str,
             template_id,
             parameters: params,
             cleaned_log,
+            classification,
+            is_new,
         }
     }
 
@@ -87,12 +146,10 @@ impl LogParser {
         while !remaining.is_empty() {
             let mut earliest_match: Option<(usize, usize, &str)> = None;
 
-            for (pattern, replacement) in PARAM_PATTERNS {
-                if let Ok(re) = regex::Regex::new(pattern) {
-                    if let Some(m) = re.find(&remaining) {
-                        if earliest_match.is_none() || m.start() < earliest_match.unwrap().0 {
-                            earliest_match = Some((m.start(), m.end(), replacement));
-                        }
+            for pat in PARAM_PATTERNS.iter() {
+                if let Some(m) = pat.regex.find(&remaining) {
+                    if earliest_match.is_none() || m.start() < earliest_match.unwrap().0 {
+                        earliest_match = Some((m.start(), m.end(), pat.replacement));
                     }
                 }
             }
@@ -102,7 +159,7 @@ impl LogParser {
                     if start > 0 {
                         result.push(TokenKind::Literal(remaining[..start].to_string()));
                     }
-                    result.push(TokenKind::Param(format!("<{}>", &replacement[1..replacement.len()-1])));
+                    result.push(TokenKind::Param(replacement.to_string()));
                     remaining = remaining[end..].to_string();
                 }
                 None => {
@@ -112,7 +169,7 @@ impl LogParser {
             }
         }
 
-        // Merge consecutive literals
+        // Fusionner les littéraux consécutifs
         let mut merged = Vec::new();
         for token in result {
             if let Some(TokenKind::Literal(last)) = merged.last_mut() {
@@ -129,20 +186,21 @@ impl LogParser {
     fn build_template_string(tokens: &[TokenKind]) -> String {
         tokens.iter()
             .map(|t| match t {
-                TokenKind::Literal(s) => s.clone(),
-                TokenKind::Param(p) => p.clone(),
+                TokenKind::Literal(s) => s.as_str(),
+                TokenKind::Param(p) => p.as_str(),
             })
-            .collect()
+            .collect::<Vec<_>>()
+            .join("")
     }
 
-    fn get_or_create_template(&mut self, template: &str) -> u64 {
+    fn get_or_register_template(&mut self, template: &str) -> (u64, TemplateClass, bool) {
         if let Some(info) = self.templates.get_mut(template) {
             info.count += 1;
-            return info.id;
+            return (info.id, info.classification.clone(), false);
         }
 
+        // Éviction LRU si saturation
         if self.templates.len() >= self.max_templates {
-            // Remove least used template
             let least = self.templates.iter()
                 .min_by_key(|(_, v)| v.count)
                 .map(|(k, _)| k.clone());
@@ -152,14 +210,35 @@ impl LogParser {
         }
 
         let id = (self.templates.len() + 1) as u64;
-        let tokens = Self::tokenize(template);
+        let classification = Self::classify_template_content(template);
+        
         self.templates.insert(template.to_string(), TemplateInfo {
             id,
             template: template.to_string(),
             count: 1,
-            tokens,
+            classification: classification.clone(),
+            is_new: true,
         });
-        id
+
+        (id, classification, true)
+    }
+
+    /// Classification structurelle des templates
+    fn classify_template_content(template: &str) -> TemplateClass {
+        let t = template.to_lowercase();
+        if t.contains("exfiltration") || t.contains("data_leak") || t.contains("dump.csv")
+            || t.contains("customer records") || t.contains("export <NUM>")
+            || (t.contains("sudo") && (t.contains("chmod 777") || t.contains("/bin/bash") || t.contains("/etc/shadow")))
+        {
+            TemplateClass::CriticalThreat
+        } else if t.contains("failed password") || t.contains("authentication failure")
+            || t.contains("out of memory") || t.contains("status=500")
+            || t.contains("segfault") || t.contains("panic") || t.contains("denied")
+        {
+            TemplateClass::WarningAnomaly
+        } else {
+            TemplateClass::StandardOperational
+        }
     }
 
     pub fn template_count(&self) -> usize {
@@ -167,16 +246,14 @@ impl LogParser {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ParsedResult {
-    pub template: String,
-    pub template_id: u64,
-    pub parameters: Vec<String>,
-    pub cleaned_log: String,
+#[derive(Debug, Clone, PartialEq)]
+enum TokenKind {
+    Literal(String),
+    Param(String),
 }
 
 // ============================================================================
-// 2. HASHING
+// 3. HASHING
 // ============================================================================
 
 pub fn hash_log(message: &str) -> String {
@@ -186,109 +263,224 @@ pub fn hash_log(message: &str) -> String {
 }
 
 // ============================================================================
-// 3. RULE-BASED DETECTION
+// 4. DETERMINISTIC DLP & SIGNATURE ENGINE (Sur Raw Logs & Règles DB)
 // ============================================================================
 
 pub struct RuleEngine {
-    keywords: HashSet<String>,
+    db: Arc<Database>,
     blacklisted_ips: HashSet<String>,
     blacklisted_users: HashSet<String>,
-    regex_rules: Vec<(regex::Regex, String, AlertLevel)>,
 }
 
 impl RuleEngine {
-    pub fn new(_config: &DetectionSettings) -> Self {
-        let mut keywords = HashSet::new();
-        keywords.insert("secret_key.pem".to_string());
-        keywords.insert("important_file.doc".to_string());
-        keywords.insert("/etc/passwd".to_string());
-        keywords.insert("/etc/shadow".to_string());
-        keywords.insert("confidential".to_string());
-        keywords.insert("data_fuite".to_string());
-        keywords.insert("sensitive_data".to_string());
-
-        let blacklisted_ips = HashSet::new();
-        // These would come from configuration
+    pub fn new(db: Arc<Database>, _config: &DetectionSettings) -> Self {
+        let mut blacklisted_ips = HashSet::new();
+        blacklisted_ips.insert("185.220.101.5".to_string());
+        blacklisted_ips.insert("192.168.1.42".to_string());
+        blacklisted_ips.insert("10.0.0.99".to_string());
 
         let mut blacklisted_users = HashSet::new();
-        blacklisted_users.insert("root".to_string());
         blacklisted_users.insert("attacker19".to_string());
         blacklisted_users.insert("cyrus".to_string());
 
-        let regex_rules = vec![
-            (
-                regex::Regex::new(r"cmd=vi /etc/(passwd|shadow|sudoers)").unwrap(),
-                "Modification de fichiers système critiques".to_string(),
-                AlertLevel::High,
-            ),
-            (
-                regex::Regex::new(r"scp\s+.*->.*:\S+").unwrap(),
-                "Transfert SCP détecté".to_string(),
-                AlertLevel::Moderate,
-            ),
-        ];
-
         Self {
-            keywords,
+            db,
             blacklisted_ips,
             blacklisted_users,
-            regex_rules,
         }
     }
 
-    pub fn evaluate(&self, log_line: &str) -> Vec<(String, AlertLevel)> {
-        let mut reasons = Vec::new();
-        let lower = log_line.to_lowercase();
+    /// Évalue un log brut contre les signatures DLP et les règles dynamiques actives en DB
+    pub fn evaluate(&self, raw_message: &str) -> Vec<(String, AlertLevel)> {
+        let mut matches = Vec::new();
+        let lower = raw_message.to_lowercase();
 
-        // Keyword detection
-        for kw in &self.keywords {
-            if lower.contains(kw.as_str()) {
-                reasons.push((format!("Mot-clé suspect: {}", kw), AlertLevel::High));
+        // 1. Signatures DLP pré-compilées
+        for (re, desc, severity) in DLP_SIGNATURES.iter() {
+            if re.is_match(raw_message) {
+                matches.push((desc.to_string(), severity.clone()));
             }
         }
 
-        // IP blacklist
-        let ip_re = regex::Regex::new(r"\b(?:\d{1,3}\.){3}\d{1,3}\b").unwrap();
-        for cap in ip_re.find_iter(log_line) {
-            if self.blacklisted_ips.contains(cap.as_str()) {
-                reasons.push((format!("IP blacklistée: {}", cap.as_str()), AlertLevel::High));
+        // 2. IP Blacklists
+        for ip in &self.blacklisted_ips {
+            if raw_message.contains(ip) {
+                matches.push((format!("Connexion/Transfert avec IP suspecte blacklistée: {}", ip), AlertLevel::High));
             }
         }
 
-        // User blacklist
-        let user_re = regex::Regex::new(r"user[\s=]*'?(\S+)'?").unwrap();
-        for cap in user_re.captures_iter(log_line) {
-            let user = cap.get(1).unwrap().as_str().to_string();
-            if self.blacklisted_users.contains(&user) && user != "root" {
-                reasons.push((format!("Utilisateur suspect: {}", user), AlertLevel::Moderate));
+        // 3. User Blacklists
+        for user in &self.blacklisted_users {
+            if lower.contains(&format!("user {}", user)) || lower.contains(&format!("user={}", user)) || lower.contains(&format!("sudo: {}", user)) {
+                matches.push((format!("Activité liée à un utilisateur surveillé / compromis: {}", user), AlertLevel::Moderate));
             }
         }
 
-        // Regex rules
-        for (re, desc, severity) in &self.regex_rules {
-            if re.is_match(log_line) {
-                reasons.push((desc.clone(), severity.clone()));
+        // 4. Règles dynamiques configurées par l'utilisateur depuis la base de données
+        if let Ok(rules) = self.db.get_rules() {
+            for rule in rules.into_iter().filter(|r| r.enabled) {
+                match rule.rule_type {
+                    RuleType::Keyword => {
+                        let kws: Vec<&str> = rule.pattern.split('|').collect();
+                        for kw in kws {
+                            if !kw.trim().is_empty() && lower.contains(&kw.trim().to_lowercase()) {
+                                matches.push((format!("Règle '{}' déclenchée (mot-clé '{}')", rule.name, kw.trim()), rule.severity.clone()));
+                                break;
+                            }
+                        }
+                    }
+                    RuleType::IpBlacklist => {
+                        let ips: Vec<&str> = rule.pattern.split('|').collect();
+                        for ip in ips {
+                            if !ip.trim().is_empty() && raw_message.contains(ip.trim()) {
+                                matches.push((format!("Règle '{}' déclenchée (IP '{}')", rule.name, ip.trim()), rule.severity.clone()));
+                                break;
+                            }
+                        }
+                    }
+                    RuleType::UserBlacklist => {
+                        let users: Vec<&str> = rule.pattern.split('|').collect();
+                        for u in users {
+                            if !u.trim().is_empty() && lower.contains(&u.trim().to_lowercase()) {
+                                matches.push((format!("Règle '{}' déclenchée (Utilisateur '{}')", rule.name, u.trim()), rule.severity.clone()));
+                                break;
+                            }
+                        }
+                    }
+                    RuleType::Regex => {
+                        if let Ok(re) = regex::Regex::new(&rule.pattern) {
+                            if re.is_match(raw_message) {
+                                matches.push((format!("Règle Regex '{}' déclenchée", rule.name), rule.severity.clone()));
+                            }
+                        }
+                    }
+                    RuleType::TemplateMatch => {
+                        if lower.contains(&rule.pattern.to_lowercase()) {
+                            matches.push((format!("Règle Template '{}' déclenchée", rule.name), rule.severity.clone()));
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
 
-        reasons
+        matches
     }
 }
 
 // ============================================================================
-// 4. TIME CORRELATION
+// 5. SEMANTIC THREAT PROFILER (BGE Embeddings & Cosine Similarity)
+// ============================================================================
+
+struct ThreatProfile {
+    category: AlertCategory,
+    description: &'static str,
+    reference_text: &'static str,
+    embedding: Option<Vec<f64>>,
+}
+
+pub struct SemanticThreatMatcher {
+    model: Arc<parking_lot::Mutex<Option<TextEmbedding>>>,
+    threat_profiles: parking_lot::Mutex<Vec<ThreatProfile>>,
+}
+
+impl SemanticThreatMatcher {
+    pub fn new(model: Arc<parking_lot::Mutex<Option<TextEmbedding>>>) -> Self {
+        let profiles = vec![
+            ThreatProfile {
+                category: AlertCategory::DataLeak,
+                description: "Exfiltration et fuite de données massives",
+                reference_text: "Data exfiltration, unauthorized file transfer to external cloud storage bucket, customer database leak, credentials dump",
+                embedding: None,
+            },
+            ThreatProfile {
+                category: AlertCategory::PrivilegeEscalation,
+                description: "Élévation de privilèges et altération des droits",
+                reference_text: "Privilege escalation, unauthorized root access, changing sudoers and shadow file permissions, executing root shell",
+                embedding: None,
+            },
+            ThreatProfile {
+                category: AlertCategory::Authentication,
+                description: "Attaque par force brute et pulvérisation de mots de passe",
+                reference_text: "Brute force authentication attack, multiple failed password attempts, PAM authorization failure on SSH",
+                embedding: None,
+            },
+            ThreatProfile {
+                category: AlertCategory::SystemAnomaly,
+                description: "Défaillance critique système et crash d'application",
+                reference_text: "Out of memory crash, fatal process kill, kernel panic, HTTP 500 internal server error collapse",
+                embedding: None,
+            },
+        ];
+
+        Self {
+            model,
+            threat_profiles: parking_lot::Mutex::new(profiles),
+        }
+    }
+
+    /// Pré-calcule les embeddings des profils de menaces de référence dès que le modèle BGE est disponible
+    pub fn init_reference_embeddings(&self) {
+        if let Some(ref mut model) = *self.model.lock() {
+            let mut profiles = self.threat_profiles.lock();
+            for profile in profiles.iter_mut() {
+                if profile.embedding.is_none() {
+                    if let Ok(mut embs) = model.embed(vec![profile.reference_text.to_string()], None) {
+                        if let Some(vec_f32) = embs.pop() {
+                            profile.embedding = Some(vec_f32.into_iter().map(|v| v as f64).collect());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Évalue la similarité sémantique d'un log avec les profils de cyber-menaces
+    pub fn match_threat(&self, log_embedding: &[f64]) -> Option<(f64, AlertCategory, &'static str)> {
+        let profiles = self.threat_profiles.lock();
+        let mut best_match: Option<(f64, AlertCategory, &'static str)> = None;
+
+        for profile in profiles.iter() {
+            if let Some(ref ref_emb) = profile.embedding {
+                let similarity = cosine_similarity(log_embedding, ref_emb);
+                if similarity > 0.60 {
+                    if best_match.is_none() || similarity > best_match.as_ref().unwrap().0 {
+                        best_match = Some((similarity, profile.category.clone(), profile.description));
+                    }
+                }
+            }
+        }
+
+        best_match
+    }
+}
+
+fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+    let dot: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let norm_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
+    let norm_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
+    if norm_a == 0.0 || norm_b == 0.0 {
+        0.0
+    } else {
+        (dot / (norm_a * norm_b)).max(0.0).min(1.0)
+    }
+}
+
+// ============================================================================
+// 6. TIME CORRELATION & BURST DETECTOR
 // ============================================================================
 
 pub struct TimeCorrelator {
-    window_seconds: u64,
     event_threshold: u64,
     recent_events: HashMap<String, VecDeque<i64>>,
 }
 
 impl TimeCorrelator {
-    pub fn new(window_seconds: u64, event_threshold: u64) -> Self {
+    pub fn new(_window_seconds: u64, event_threshold: u64) -> Self {
         Self {
-            window_seconds,
             event_threshold,
             recent_events: HashMap::new(),
         }
@@ -299,14 +491,14 @@ impl TimeCorrelator {
         let events = self.recent_events.entry(pattern.clone()).or_default();
 
         let mut decay_score = 0.0;
-        let lambda = 0.05; // Constante de décroissance
+        let lambda = 0.05; // Constante de décroissance exponentielle
 
         for &old_ts in events.iter() {
             let dt = (timestamp - old_ts).max(0) as f64;
             decay_score += (-lambda * dt).exp();
         }
 
-        // Clean old events (contributing < 0.01)
+        // Nettoyer les événements de plus de 5 minutes
         while let Some(&old) = events.front() {
             if (timestamp - old) > 300 {
                 events.pop_front();
@@ -317,10 +509,10 @@ impl TimeCorrelator {
 
         events.push_back(timestamp);
 
-        if decay_score >= (self.event_threshold as f64 * 0.5) {
+        if decay_score >= (self.event_threshold as f64 * 0.4) {
             Some((
                 decay_score,
-                format!("Score de densité temporel (Exponential Decay): {:.2} pour '{}'", decay_score, pattern)
+                format!("Rafale d'événements corrélés (Score temporel: {:.2}) sur '{}'", decay_score, pattern)
             ))
         } else {
             None
@@ -329,184 +521,134 @@ impl TimeCorrelator {
 
     fn classify_event(log_line: &str) -> String {
         let lower = log_line.to_lowercase();
-        if lower.contains("transfer") || lower.contains("scp") { "transfer_event" }
-        else if lower.contains("delete") || lower.contains("rm ") { "delete_event" }
-        else if lower.contains("login") { "login_event" }
-        else if lower.contains("ssh") { "ssh_event" }
-        else if lower.contains("failed") { "failed_event" }
-        else if lower.contains("alert") { "alert_event" }
-        else if lower.contains("sudo") { "sudo_event" }
-        else { "generic_event" }.to_string()
-    }
-}
-
-// ============================================================================
-// 5. ANOMALY DETECTION — Simple statistical detector
-// ============================================================================
-
-pub struct AnomalyDetector {
-    template_frequencies: HashMap<String, Vec<u64>>,
-    window_size: usize,
-}
-
-impl AnomalyDetector {
-    pub fn new(window_size: usize) -> Self {
-        Self {
-            template_frequencies: HashMap::new(),
-            window_size,
+        if lower.contains("transfer") || lower.contains("scp") || lower.contains("curl") || lower.contains("dump") {
+            "data_transfer_burst".to_string()
+        } else if lower.contains("failed") || lower.contains("invalid user") || lower.contains("ssh") {
+            "auth_failure_burst".to_string()
+        } else if lower.contains("sudo") || lower.contains("chmod") || lower.contains("chown") {
+            "privilege_escalation_burst".to_string()
+        } else {
+            "operational_event".to_string()
         }
     }
+}
 
-    /// Détecte si un template est anormalement fréquent par rapport à l'historique
-    pub fn detect(&mut self, template: &str, current_count: u64) -> Option<f64> {
-        let freqs = self.template_frequencies
-            .entry(template.to_string())
-            .or_default();
+// ============================================================================
+// 7. CONTEXTUAL LLM ANALYZER (SOC Tier-2 Automated Reasoning)
+// ============================================================================
 
-        if freqs.len() < 5 {
-            freqs.push(current_count);
+pub struct ContextualLlmAnalyzer;
+
+#[derive(serde::Deserialize)]
+struct LlmEvaluationResponse {
+    is_threat: bool,
+    confidence: f64,
+    explanation: String,
+    mitigation: Option<String>,
+}
+
+impl ContextualLlmAnalyzer {
+    /// Analyse contextuelle avec logs voisins via l'API LLM configurée
+    pub async fn analyze_incident(
+        settings: &LlmSettings,
+        target_log: &RawLog,
+        reasons: &[String],
+        neighbor_logs: &[RawLog],
+    ) -> Option<(String, String, bool)> {
+        if !settings.enabled || settings.base_url.trim().is_empty() {
             return None;
         }
 
-        // Calculate z-score
-        let mean = freqs.iter().sum::<u64>() as f64 / freqs.len() as f64;
-        let variance = freqs.iter()
-            .map(|&x| (x as f64 - mean).powi(2))
-            .sum::<f64>() / freqs.len() as f64;
-        let std_dev = variance.sqrt().max(1.0);
+        let neighbors_text: Vec<String> = neighbor_logs.iter().map(|l| {
+            format!("[{}] (Host: {}) {}", l.timestamp.format("%H:%M:%S"), l.hostname, l.raw_message)
+        }).collect();
 
-        let z_score = (current_count as f64 - mean) / std_dev;
+        let system_prompt = "Tu es un analyste expert en cybersécurité et détection de fuites de données (SOC Tier-2/Tier-3). \
+        Ton rôle est d'analyser un log suspect en tenant compte de sa chronologie et de ses logs voisins. \
+        Tu dois répondre STRICTEMENT au format JSON avec les champs suivants : \
+        {\
+          \"is_threat\": true/false,\
+          \"confidence\": 0.0 à 1.0,\
+          \"explanation\": \"Explication claire et synthétique en français de l'incident et de ce qui s'est réellement passé\",\
+          \"mitigation\": \"Action corrective immédiate recommandée (ex: isoler l'hôte, bloquer l'IP, révoquer la clé)\"\
+        }";
 
-        // Update window
-        freqs.push(current_count);
-        if freqs.len() > self.window_size {
-            freqs.remove(0);
-        }
-
-        if z_score > 2.5 {
-            Some((z_score - 2.5).min(1.0)) // Normalize to [0, 1]
+        let neighbors_joined = if neighbors_text.is_empty() {
+            "(Aucun log voisin)".to_string()
         } else {
-            None
+            neighbors_text.join("\n")
+        };
+
+        let reasons_joined = reasons.join("\n- ");
+
+        let user_prompt = format!(
+            "LOG SUSPECT CIBLÉ :\n[Host: {}] [Heure: {}] {}\n\n\
+            SIGNAUX DÉTECTÉS PAR LE MOTEUR :\n{}\n\n\
+            CONTEXTE CHRONOLOGIQUE (LOGS VOISINS) :\n{}\n\n\
+            Fournis ton verdict SOC d'investigation au format JSON demandé.",
+            target_log.hostname,
+            target_log.timestamp.to_rfc3339(),
+            target_log.raw_message,
+            reasons_joined,
+            neighbors_joined,
+        );
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(6))
+            .build()
+            .ok()?;
+
+        let api_url = format!("{}/chat/completions", settings.base_url.trim_end_matches('/'));
+        let request_body = serde_json::json!({
+            "model": if settings.model.is_empty() { "llama3" } else { &settings.model },
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.1,
+            "response_format": {"type": "json_object"}
+        });
+
+        let mut req = client.post(&api_url).json(&request_body);
+        if !settings.api_key.trim().is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", settings.api_key));
         }
+
+        if let Ok(res) = req.send().await {
+            if res.status().is_success() {
+                if let Ok(json) = res.json::<serde_json::Value>().await {
+                    if let Some(content) = json["choices"][0]["message"]["content"].as_str() {
+                        if let Ok(parsed) = serde_json::from_str::<LlmEvaluationResponse>(content) {
+                            return Some((
+                                parsed.explanation,
+                                parsed.mitigation.unwrap_or_else(|| "Surveiller les activités de l'utilisateur et isoler la machine en cas de récidive.".to_string()),
+                                parsed.is_threat
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 }
 
 // ============================================================================
-// 6. SCORE FUSION
-// ============================================================================
-
-pub fn fuse_scores(
-    supervised_score: Option<f64>,
-    anomaly_score: Option<f64>,
-    rule_count: usize,
-    time_correlation: f64,
-    is_outlier: bool,
-) -> (f64, AlertLevel, Vec<String>) {
-    let mut reasons = Vec::new();
-    let mut total = 0.0f64;
-    let mut weights = 0.0f64;
-
-    // Supervised score (weight: 0.35)
-    if let Some(s) = supervised_score {
-        total += s * 0.35;
-        weights += 0.35;
-        if s > 0.6 {
-            reasons.push(format!("Score supervisé élevé: {:.2}", s));
-        }
-    }
-
-    // Anomaly score (weight: 0.30)
-    if let Some(a) = anomaly_score {
-        total += a * 0.30;
-        weights += 0.30;
-        if a > 0.5 {
-            reasons.push(format!("Anomalie détectée: {:.2}", a));
-        }
-    }
-
-    // Rules (weight: 0.20)
-    if rule_count > 0 {
-        let rule_contrib = (rule_count as f64 * 0.15).min(1.0);
-        total += rule_contrib * 0.20;
-        weights += 0.20;
-        reasons.push(format!("{} règle(s) déclenchée(s)", rule_count));
-    }
-
-    // Time correlation (weight: 0.15)
-    if time_correlation > 0.0 {
-        let tc_score = (time_correlation / 10.0).min(1.0); // Normalize to [0, 1]
-        total += tc_score * 0.15;
-        weights += 0.15;
-        reasons.push(format!("Corrélation temporelle suspecte: {:.2}", tc_score));
-    }
-
-    // Outlier (weight: 0.05)
-    if is_outlier {
-        total += 1.0 * 0.05;
-        weights += 0.05;
-        reasons.push("Log isolé (outlier DBSCAN)".to_string());
-    }
-
-    // Normalize
-    let final_score = if weights > 0.0 { total / weights } else { 0.0 };
-
-    let level = if final_score >= 0.70 {
-        AlertLevel::High
-    } else if final_score >= 0.45 {
-        AlertLevel::Moderate
-    } else if final_score >= 0.25 {
-        AlertLevel::Low
-    } else {
-        AlertLevel::Benign
-    };
-
-    (final_score, level, reasons)
-}
-
-// ============================================================================
-// 7. ORCHESTRATOR — Pipeline complet
+// 8. UNIFIED DETECTION PIPELINE
 // ============================================================================
 
 pub struct DetectionPipeline {
     parser: LogParser,
     rule_engine: RuleEngine,
     time_correlator: TimeCorrelator,
-    anomaly_detector: AnomalyDetector,
+    semantic_matcher: SemanticThreatMatcher,
     db: Arc<Database>,
     settings: DetectionSettings,
-    supervised_model: Option<SupervisedModel>,
+    app_settings: Arc<parking_lot::Mutex<AppSettings>>,
     active_response: crate::active_response::ActiveResponseEngine,
     text_embedding_model: Arc<parking_lot::Mutex<Option<TextEmbedding>>>,
     recent_embeddings: VecDeque<(String, Vec<f64>)>,
-}
-
-#[derive(Clone)]
-pub struct SupervisedModel {
-    pub templates: Vec<String>,
-    pub weights: Vec<f64>,
-    pub threshold: f64,
-}
-
-impl SupervisedModel {
-    /// Simple TF-IDF-inspired scoring
-    pub fn score(&self, template: &str) -> Option<f64> {
-        let tokens: HashSet<&str> = template.split_whitespace().collect();
-        let mut score = 0.0;
-        for (i, known_template) in self.templates.iter().enumerate() {
-            let known_tokens: HashSet<&str> = known_template.split_whitespace().collect();
-            let intersection = tokens.intersection(&known_tokens).count();
-            let union = tokens.union(&known_tokens).count();
-            if union > 0 {
-                let similarity = intersection as f64 / union as f64;
-                score += similarity * self.weights.get(i).copied().unwrap_or(0.0);
-            }
-        }
-        if score > 0.0 {
-            Some((score - self.threshold).max(0.0).min(1.0))
-        } else {
-            None
-        }
-    }
 }
 
 impl DetectionPipeline {
@@ -515,48 +657,48 @@ impl DetectionPipeline {
             settings.time_window_seconds,
             settings.event_threshold,
         );
-        let anomaly_detector = AnomalyDetector::new(50);
         let parser = LogParser::new(10000);
-        let rule_engine = RuleEngine::new(&settings);
+        let rule_engine = RuleEngine::new(db.clone(), &settings);
         
         let text_embedding_model = Arc::new(parking_lot::Mutex::new(None));
+        let semantic_matcher = SemanticThreatMatcher::new(text_embedding_model.clone());
+
         let model_clone = text_embedding_model.clone();
+        let app_handle_clone = app_handle.clone();
         
         std::thread::spawn(move || {
             use tauri::Emitter;
-            let _ = app_handle.emit("ml-loading", ());
+            let _ = app_handle_clone.emit("ml-loading", ());
             
             match TextEmbedding::try_new(InitOptions::new(EmbeddingModel::BGESmallENV15)) {
                 Ok(model) => {
                     *model_clone.lock() = Some(model);
-                    let _ = app_handle.emit("ml-ready", ());
+                    let _ = app_handle_clone.emit("ml-ready", ());
                 }
                 Err(e) => {
                     log::warn!("Impossible de charger le modèle d'embedding BGE: {}", e);
-                    let _ = app_handle.emit("ml-error", e.to_string());
+                    let _ = app_handle_clone.emit("ml-error", e.to_string());
                 }
             }
         });
+
+        let app_settings = Arc::new(parking_lot::Mutex::new(db.get_settings().unwrap_or_default()));
 
         Self {
             parser,
             rule_engine,
             time_correlator: correlator,
-            anomaly_detector,
+            semantic_matcher,
             db: db.clone(),
             settings,
-            supervised_model: None,
+            app_settings,
             active_response: crate::active_response::ActiveResponseEngine::new(db),
             text_embedding_model,
             recent_embeddings: VecDeque::with_capacity(100),
         }
     }
 
-    pub fn set_supervised_model(&mut self, model: SupervisedModel) {
-        self.supervised_model = Some(model);
-    }
-
-    /// Processus complet d'un log entrant
+    /// Processus complet de détection multi-axes sur chaque log entrant
     pub fn process_log(
         &mut self,
         source_id: &str,
@@ -566,7 +708,7 @@ impl DetectionPipeline {
     ) -> Result<Option<Alert>, AppError> {
         let log_hash = hash_log(raw_message);
 
-        // 1. Insérer le log brut dans la DB
+        // 1. Persister le log brut dans la base SQLCipher
         let raw_log = RawLog {
             id: uuid::Uuid::new_v4().to_string(),
             source_id: source_id.to_string(),
@@ -579,7 +721,7 @@ impl DetectionPipeline {
 
         self.db.insert_raw_log(&raw_log)?;
 
-        // 2. Parser (Drain-like)
+        // 2. AXE STRUCTUREL : Mining de template Drain & Détection de template critique/inédit
         let parsed = self.parser.parse(raw_message);
         self.db.insert_parsed_log(
             &uuid::Uuid::new_v4().to_string(),
@@ -590,42 +732,71 @@ impl DetectionPipeline {
             &serde_json::to_string(&parsed.parameters).unwrap_or_default(),
         )?;
 
-        // 3. Règles
-        let rule_matches = self.rule_engine.evaluate(raw_message);
-        let _max_rule_severity = rule_matches.iter()
-            .map(|(_, l)| l.clone())
-            .max_by(|a, b| alert_level_rank(a).cmp(&alert_level_rank(b)));
+        let mut reasons = Vec::new();
+        let mut dlp_score = 0.0f64;
+        let mut template_score = 0.0f64;
+        let mut semantic_score = 0.0f64;
+        let mut time_score = 0.0f64;
+        let mut is_critical_hit = false;
 
-        // 4. Time Correlation
-        let mut time_correlation_score = 0.0;
-        let mut time_correlation_reason = None;
-        if let Some((score, reason)) = self.time_correlator.check_exponential_decay(&parsed.template, timestamp.timestamp()) {
-            time_correlation_score = score;
-            time_correlation_reason = Some(reason);
+        // Évaluation Drain
+        match parsed.classification {
+            TemplateClass::CriticalThreat => {
+                template_score = 0.90;
+                is_critical_hit = true;
+                reasons.push(format!("Template critique correspondant à un motif de fuite/attaque: '{}'", parsed.template));
+            }
+            TemplateClass::WarningAnomaly => {
+                template_score = 0.50;
+                reasons.push(format!("Template d'avertissement système: '{}'", parsed.template));
+            }
+            TemplateClass::StandardOperational => {
+                if parsed.is_new {
+                    template_score = 0.20;
+                    reasons.push("Template inédit observé pour la première fois (Zero-Day structural)".to_string());
+                }
+            }
         }
 
-        // 5. Détection d'anomalie basée sur la fréquence des templates
-        let freq_count = self.db.get_template_count(&parsed.template)?;
-        let anomaly_score = self.anomaly_detector.detect(&parsed.template, freq_count);
+        // 3. AXE DÉTERMINISTE DLP : Inspection directe des Raw Logs & Règles DB
+        let rule_matches = self.rule_engine.evaluate(raw_message);
+        if !rule_matches.is_empty() {
+            dlp_score = (rule_matches.len() as f64 * 0.40).min(1.0);
+            for (reason, severity) in &rule_matches {
+                if *severity == AlertLevel::High {
+                    is_critical_hit = true;
+                    dlp_score = 1.0;
+                }
+                reasons.push(reason.clone());
+            }
+        }
 
-        // 6. Score supervisé
-        let supervised_score = self.supervised_model.as_ref()
-            .and_then(|model| model.score(&parsed.template));
+        // 4. AXE TEMPOREL : Exponential decay sur rafales d'événements
+        if let Some((score, reason)) = self.time_correlator.check_exponential_decay(&parsed.template, timestamp.timestamp()) {
+            time_score = (score / 10.0).min(1.0);
+            reasons.push(reason);
+        }
 
-        // NOUVEAU: Text Embedding (BGE) via fastembed
-        let mut embedding_vector: Option<Vec<f64>> = None;
+        // 5. AXE SÉMANTIQUE : Embedding vectoriel BGE & Similarité avec menaces types
+        self.semantic_matcher.init_reference_embeddings();
         if let Some(ref mut model) = *self.text_embedding_model.lock() {
-            if let Ok(mut embeddings) = model.embed(vec![parsed.template.clone()], None) {
+            if let Ok(mut embeddings) = model.embed(vec![raw_message.to_string()], None) {
                 if let Some(vec_f32) = embeddings.pop() {
                     let vec_f64: Vec<f64> = vec_f32.into_iter().map(|v| v as f64).collect();
-                    embedding_vector = Some(vec_f64.clone());
                     
+                    if let Some((similarity, _cat, threat_desc)) = self.semantic_matcher.match_threat(&vec_f64) {
+                        semantic_score = similarity;
+                        if similarity >= 0.70 {
+                            reasons.push(format!("Forte similarité sémantique ({:.0}%) avec: {}", similarity * 100.0, threat_desc));
+                        }
+                    }
+
                     let log_emb = LogEmbedding {
                         id: uuid::Uuid::new_v4().to_string(),
                         parsed_log_id: uuid::Uuid::new_v4().to_string(),
                         raw_log_id: raw_log.id.clone(),
-                        embedding: vec_f64.clone(),
-                        dimension: vec_f64.len() as u32,
+                        embedding: vec_f64,
+                        dimension: 384,
                         created_at: Utc::now(),
                     };
                     let _ = self.db.insert_log_embedding(&log_emb);
@@ -633,80 +804,100 @@ impl DetectionPipeline {
             }
         }
 
-        // NOUVEAU: Clustering adaptatif HDBSCAN (Online-like)
-        let mut is_outlier = false;
-        if let Some(ref emb) = embedding_vector {
-            self.recent_embeddings.push_back((raw_log.id.clone(), emb.clone()));
-            if self.recent_embeddings.len() > 100 {
-                self.recent_embeddings.pop_front();
-            }
+        // 6. FUSION MULTI-AXES & SCORE DE RISQUE COMPOSITE
+        let mut composite_score = (dlp_score * 0.35)
+            + (template_score * 0.25)
+            + (semantic_score * 0.25)
+            + (time_score * 0.15);
 
-            // Exécuter HDBSCAN sur les embeddings récents (min 20)
-            if self.recent_embeddings.len() >= 20 {
-                // Hdbscan requires data as slices of floats.
-                let data: Vec<Vec<f32>> = self.recent_embeddings.iter()
-                    .map(|(_, v)| v.iter().map(|f| *f as f32).collect())
-                    .collect();
-                
-                // On utilise HDBSCAN avec min_cluster_size
-                if let Ok(clusterer) = hdbscan::Hdbscan::default_hyper_params(&data).cluster() {
-                    if let Some(last_label) = clusterer.last() {
-                        // -1 signifie "bruit" / "outlier"
-                        if *last_label == -1 {
-                            is_outlier = true;
+        if is_critical_hit {
+            composite_score = composite_score.max(0.85);
+        }
+
+        let alert_level = if composite_score >= 0.70 {
+            AlertLevel::High
+        } else if composite_score >= 0.45 {
+            AlertLevel::Moderate
+        } else if composite_score >= 0.25 {
+            AlertLevel::Low
+        } else {
+            AlertLevel::Benign
+        };
+
+        // 7. CRÉATION D'ALERTE ET VALIDATION CONTEXTUELLE LLM
+        if alert_level != AlertLevel::Benign || !reasons.is_empty() {
+            let category = categorize_threat(raw_message, &reasons);
+            
+            // Extraction des logs voisins pour l'analyse de contexte
+            let neighbor_logs = self.db.get_log_context_neighbors(&raw_log.id, Some(hostname), Some(timestamp), 10)
+                .unwrap_or_default();
+
+            let context_strings: Vec<String> = neighbor_logs.iter()
+                .map(|l| format!("[{}] {}", l.timestamp.format("%H:%M:%S"), l.raw_message))
+                .collect();
+
+            // Appel synchrone/bloquant léger du LLM si activé
+            let app_settings = self.app_settings.lock().clone();
+            let mut llm_explanation = None;
+            let mut mitigation_suggestion = None;
+
+            if let Some(ref llm_cfg) = app_settings.llm {
+                if llm_cfg.enabled {
+                    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().ok();
+                    if let Some(runtime) = rt {
+                        if let Some((exp, mit, _is_threat)) = runtime.block_on(ContextualLlmAnalyzer::analyze_incident(
+                            llm_cfg,
+                            &raw_log,
+                            &reasons,
+                            &neighbor_logs,
+                        )) {
+                            llm_explanation = Some(exp);
+                            mitigation_suggestion = Some(mit);
                         }
                     }
                 }
             }
-        }
 
-        // 7. Fusion
-        let (final_score, level, reasons) = fuse_scores(
-            supervised_score,
-            anomaly_score,
-            rule_matches.len(),
-            time_correlation_score,
-            is_outlier,
-        );
-
-        // Add rule reasons
-        let mut all_reasons: Vec<String> = reasons;
-        for (reason, _) in &rule_matches {
-            all_reasons.push(reason.clone());
-        }
-        if let Some(ref tc_reason) = time_correlation_reason {
-            all_reasons.push(tc_reason.clone());
-        }
-
-        // 8. Créer alerte si nécessaire
-        if level != AlertLevel::Benign || !all_reasons.is_empty() {
-            let category = categorize_threat(raw_message, &all_reasons);
             let alert = Alert {
                 id: uuid::Uuid::new_v4().to_string(),
                 raw_log_id: raw_log.id.clone(),
                 parsed_log_id: None,
                 template: Some(parsed.template),
                 category,
-                supervised_score,
-                anomaly_score,
+                supervised_score: Some(semantic_score),
+                anomaly_score: Some(template_score),
                 cluster_id: None,
                 is_outlier: false,
-                final_score,
-                level: if all_reasons.is_empty() { AlertLevel::Benign } else { level.clone() },
-                reasons: all_reasons,
-                context_logs: Vec::new(),
+                final_score: composite_score,
+                level: alert_level,
+                reasons,
+                context_logs: context_strings,
+                llm_explanation,
+                mitigation_suggestion,
                 detected_at: Utc::now(),
                 acknowledged: false,
                 acknowledged_at: None,
             };
 
             self.db.insert_alert(&alert)?;
-            
-            // SOAR Trigger
+
+            // 8. SOAR & Active Response & Webhooks
             if alert.level == AlertLevel::High {
                 let _ = self.active_response.trigger_response(&alert);
             }
-            
+
+            // Webhook notification
+            let alert_clone = alert.clone();
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().ok();
+                if let Some(runtime) = rt {
+                    // Si un webhook URL est configuré dans les variables ou settings
+                    if let Ok(webhook_url) = std::env::var("DEFUDOLOG_WEBHOOK_URL") {
+                        let _ = runtime.block_on(crate::webhook_notifier::WebhookNotifier::send_alert_notification(&webhook_url, &alert_clone));
+                    }
+                }
+            });
+
             Ok(Some(alert))
         } else {
             Ok(None)
@@ -727,7 +918,6 @@ impl DetectionPipeline {
         Ok(alerts)
     }
 
-    /// Statistics
     pub fn get_stats(&self) -> Result<DashboardStats, AppError> {
         self.db.get_dashboard_stats()
     }
@@ -749,15 +939,6 @@ impl DetectionPipeline {
     }
 }
 
-fn alert_level_rank(level: &AlertLevel) -> u8 {
-    match level {
-        AlertLevel::Benign => 0,
-        AlertLevel::Low => 1,
-        AlertLevel::Moderate => 2,
-        AlertLevel::High => 3,
-    }
-}
-
 fn categorize_threat(raw_message: &str, reasons: &[String]) -> AlertCategory {
     let text = format!("{} {}", raw_message, reasons.join(" ")).to_lowercase();
 
@@ -769,7 +950,8 @@ fn categorize_threat(raw_message: &str, reasons: &[String]) -> AlertCategory {
     } else if text.contains("leak") || text.contains("exfiltration")
         || text.contains("export") || text.contains("transfer")
         || text.contains("sensible") || text.contains("secret")
-        || text.contains("password") || text.contains("dump") {
+        || text.contains("password") || text.contains("dump")
+        || text.contains("credit_cards") || text.contains("s3://") {
         AlertCategory::DataLeak
     } else if text.contains("sudo") || text.contains("root")
         || text.contains("privilege") || text.contains("chmod 777")
@@ -784,16 +966,4 @@ fn categorize_threat(raw_message: &str, reasons: &[String]) -> AlertCategory {
     } else {
         AlertCategory::General
     }
-}
-
-// ============================================================================
-// 8. LOG COLLECTOR INTERFACE (trait only — implementations in collector.rs)
-// ============================================================================
-
-/// Common trait for all collectors
-pub trait LogCollector: Send {
-    fn start(&mut self) -> Result<(), crate::error::AppError>;
-    fn stop(&mut self) -> Result<(), crate::error::AppError>;
-    fn is_running(&self) -> bool;
-    fn name(&self) -> &str;
 }

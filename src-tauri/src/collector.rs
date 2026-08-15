@@ -112,7 +112,7 @@ impl LogCollector {
             let mut last_pos = 0;
 
             // Fonction pour lire les nouvelles lignes depuis last_pos
-            let mut read_new_lines = |pos: &mut u64| {
+            let read_new_lines = |pos: &mut u64| {
                 if let Ok(mut file) = File::open(&file_path) {
                     let metadata = file.metadata().unwrap();
                     // Gérer la rotation de fichier (truncate)
@@ -122,7 +122,6 @@ impl LogCollector {
 
                     if let Ok(_) = file.seek(SeekFrom::Start(*pos)) {
                         let reader = BufReader::new(file);
-                        let mut lines_read = 0;
                         for line in reader.lines() {
                             if let Ok(line) = line {
                                 let line_len = line.len() as u64 + 1; // +1 pour le \n
@@ -130,7 +129,6 @@ impl LogCollector {
                                     let _ = Self::ingest_line(&db, &source_id_thread, &hostname, &line);
                                 }
                                 *pos += line_len;
-                                lines_read += 1;
                             }
                         }
                     }
