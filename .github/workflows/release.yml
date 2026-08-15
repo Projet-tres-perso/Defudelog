@@ -60,21 +60,36 @@ jobs:
           $opensslDir = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $opensslDir) { throw "OpenSSL installation directory not found" }
           echo "OpenSSL found at: $opensslDir"
-          # Chercher le dossier contenant les .lib
-          $libCandidates = @(
-            "$opensslDir\lib\VC\x64",
-            "$opensslDir\lib\VC",
-            "$opensslDir\lib"
-          )
-          $libDir = $libCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $libDir) { throw "OpenSSL lib directory not found" }
+
+          # Lister tout le contenu pour le debug
+          echo "=== Full OpenSSL directory tree (lib) ==="
+          Get-ChildItem -Path "$opensslDir\lib" -Recurse -Filter "*.lib" | ForEach-Object { echo $_.FullName }
+
+          # Chercher libcrypto*.lib dans tout le répertoire OpenSSL
+          $cryptoLib = Get-ChildItem -Path "$opensslDir" -Recurse -Filter "libcrypto*.lib" | Select-Object -First 1
+          if (-not $cryptoLib) { throw "libcrypto*.lib not found anywhere in $opensslDir" }
+          $libDir = $cryptoLib.DirectoryName
+          echo "Found crypto lib: $($cryptoLib.FullName)"
+
+          # Si le fichier ne s'appelle pas exactement libcrypto.lib, créer une copie
+          if ($cryptoLib.Name -ne "libcrypto.lib") {
+            Copy-Item $cryptoLib.FullName "$libDir\libcrypto.lib"
+            echo "Created copy: $libDir\libcrypto.lib"
+          }
+          # Idem pour libssl
+          $sslLib = Get-ChildItem -Path $libDir -Filter "libssl*.lib" | Select-Object -First 1
+          if ($sslLib -and $sslLib.Name -ne "libssl.lib") {
+            Copy-Item $sslLib.FullName "$libDir\libssl.lib"
+            echo "Created copy: $libDir\libssl.lib"
+          }
+
           echo "OPENSSL_LIB_DIR=$libDir" >> $env:GITHUB_ENV
           echo "OPENSSL_INCLUDE_DIR=$opensslDir\include" >> $env:GITHUB_ENV
           echo "OPENSSL_DIR=$opensslDir" >> $env:GITHUB_ENV
           # Ajouter au LIB pour que le linker MSVC trouve libcrypto.lib et libssl.lib
           echo "LIB=$env:LIB;$libDir" >> $env:GITHUB_ENV
-          echo "Detected OpenSSL lib dir: $libDir"
-          Get-ChildItem $libDir
+          echo "=== Final lib dir contents ==="
+          Get-ChildItem $libDir -Filter "*.lib" | ForEach-Object { echo $_.Name }
 
       - uses: tauri-apps/tauri-action@v0
         env:
