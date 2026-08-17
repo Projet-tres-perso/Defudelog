@@ -91,12 +91,26 @@ jobs:
           echo "=== Final lib dir contents ==="
           Get-ChildItem $libDir -Filter "*.lib" | ForEach-Object { echo $_.Name }
 
-      - uses: tauri-apps/tauri-action@v0
+      - name: Build and Publish Release
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: app-v__VERSION__ # Crée automatiquement un tag Git
-          releaseName: "App v__VERSION__"
-          releaseBody: "Voir les fichiers d'installation ci-dessous."
+          releaseName: "DeFuDoLog v__VERSION__"
+          releaseBody: "Release officielle de DeFuDoLog v__VERSION__. Téléchargez l'installeur correspondant à votre système ci-dessous."
           releaseDraft: true
           prerelease: false
+
+      - name: Upload Build Artifacts (Backup)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: defudolog-binaries-${{ matrix.platform }}
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: ignore
