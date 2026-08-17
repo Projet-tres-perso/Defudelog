@@ -16,14 +16,13 @@ export default function LogViewer() {
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await invoke<{ logs: RawLog[]; total: number }>("query_logs", {
-        search,
-        sourceId: sourceFilter || null,
+      const result = await invoke<{ logs: RawLog[]; total: number }>("get_raw_logs", {
+        search: search.trim() ? search.trim() : null,
         page,
         perPage,
       });
-      setLogs(result.logs);
-      setTotal(result.total);
+      setLogs(result.logs || []);
+      setTotal(result.total || 0);
     } catch (e) {
       console.error("Failed to fetch logs:", e);
     } finally {
@@ -37,12 +36,20 @@ export default function LogViewer() {
     return () => clearInterval(interval);
   }, [fetchLogs]);
 
-  const viewParsed = async (logId: string) => {
+  const [contextLogs, setContextLogs] = useState<RawLog[]>([]);
+  const [selectedRawLog, setSelectedRawLog] = useState<RawLog | null>(null);
+
+  const viewContext = async (log: RawLog) => {
+    setSelectedRawLog(log);
     try {
-      const parsed = await invoke<ParsedLog>("get_log_detail", { logId });
-      setSelectedLog(parsed);
+      const neighbors = await invoke<RawLog[]>("get_log_context", {
+        logId: log.id,
+        before: 10,
+        after: 10,
+      });
+      setContextLogs(neighbors || []);
     } catch (e) {
-      console.error(e);
+      console.error("Erreur get_log_context:", e);
     }
   };
 
@@ -100,8 +107,10 @@ export default function LogViewer() {
               logs.map((log) => (
                 <div
                   key={log.id}
-                  onClick={() => viewParsed(log.id)}
-                  className="log-line cursor-pointer flex items-start gap-3"
+                  onClick={() => viewContext(log)}
+                  className={`log-line cursor-pointer flex items-start gap-3 transition-colors ${
+                    selectedRawLog?.id === log.id ? "bg-primary-500/10 border-l-2 border-primary-500" : ""
+                  }`}
                 >
                   <span className="text-surface-500 whitespace-nowrap text-2xs mt-0.5">
                     {new Date(log.timestamp).toLocaleString("fr-FR", {
@@ -124,37 +133,55 @@ export default function LogViewer() {
           </div>
         </div>
 
-        {/* Detail panel */}
-        {selectedLog && (
+        {/* Detail & Context panel */}
+        {selectedRawLog && (
           <div className="w-96 flex-shrink-0 card space-y-4 overflow-y-auto">
-            <h3 className="font-semibold text-sm">Détail du log</h3>
+            <h3 className="font-semibold text-sm flex items-center justify-between">
+              <span>Investigation Chronologique</span>
+              <span className="badge bg-primary-500/20 text-primary-400 text-2xs">
+                {contextLogs.length} voisins
+              </span>
+            </h3>
+            
             <div className="space-y-3">
               <div>
-                <span className="text-2xs text-surface-500 uppercase">Template détecté</span>
-                <p className="font-mono text-xs bg-surface-800 rounded p-2 mt-1 break-all">
-                  {selectedLog.template}
+                <span className="text-2xs text-surface-500 uppercase font-semibold">Log Ciblé</span>
+                <p className="font-mono text-xs text-amber-300 bg-surface-900 border border-amber-500/30 rounded p-2.5 mt-1 break-all">
+                  {selectedRawLog.raw_message}
+                </p>
+                <p className="text-2xs text-surface-500 mt-1">
+                  Hôte: {selectedRawLog.hostname} · Hash: {selectedRawLog.log_hash.substring(0, 12)}...
                 </p>
               </div>
-              <div>
-                <span className="text-2xs text-surface-500 uppercase">Paramètres extraits</span>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {selectedLog.parameters.map((p, i) => (
-                    <span key={i} className="text-xs bg-primary-600/15 text-primary-400 px-2 py-0.5 rounded">
-                      {p}
-                    </span>
-                  ))}
+
+              {contextLogs.length > 0 && (
+                <div className="pt-2 border-t border-surface-800">
+                  <span className="text-2xs text-surface-400 uppercase font-semibold">
+                    Storyline (Contexte Immédiat)
+                  </span>
+                  <div className="mt-2 space-y-1.5 max-h-96 overflow-y-auto">
+                    {contextLogs.map((c) => {
+                      const isTarget = c.id === selectedRawLog.id;
+                      return (
+                        <div
+                          key={c.id}
+                          className={`p-2 rounded font-mono text-2xs transition-colors ${
+                            isTarget
+                              ? "bg-amber-500/15 border border-amber-500/40 text-amber-200"
+                              : "bg-surface-900/80 text-surface-400 border border-surface-800"
+                          }`}
+                        >
+                          <div className="flex justify-between text-surface-500 text-3xs mb-0.5">
+                            <span>{new Date(c.timestamp).toLocaleTimeString("fr-FR")}</span>
+                            {isTarget && <span className="text-amber-400 font-bold">CIBLE</span>}
+                          </div>
+                          <p className="break-all">{c.raw_message}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <span className="text-2xs text-surface-500 uppercase">Template ID</span>
-                <p className="text-sm font-mono">{selectedLog.template_id}</p>
-              </div>
-              <div className="pt-3 border-t border-surface-700">
-                <span className="text-2xs text-surface-500 uppercase">Message brut</span>
-                <p className="font-mono text-xs text-surface-300 mt-1 break-all">
-                  {selectedLog.raw_message}
-                </p>
-              </div>
+              )}
             </div>
           </div>
         )}

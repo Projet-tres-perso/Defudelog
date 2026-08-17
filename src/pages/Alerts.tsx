@@ -215,6 +215,32 @@ export default function Alerts() {
                 </div>
               )}
 
+              {/* Verdict et Analyse SOC LLM */}
+              {selectedAlert.llm_explanation && (
+                <div className="bg-primary-950/40 border border-primary-500/30 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-primary-400 font-semibold text-xs">
+                    <ShieldAlert size={14} />
+                    <span>Verdict SOC IA (Analyse Contextuelle)</span>
+                  </div>
+                  <p className="text-xs text-surface-200 leading-relaxed font-sans">
+                    {selectedAlert.llm_explanation}
+                  </p>
+                </div>
+              )}
+
+              {/* Recommandation de Remédiation SOAR */}
+              {selectedAlert.mitigation_suggestion && (
+                <div className="bg-amber-950/40 border border-amber-500/30 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-xs">
+                    <Lock size={14} />
+                    <span>Action Corrective Recommandée (SOAR)</span>
+                  </div>
+                  <p className="text-xs text-amber-200/90 leading-relaxed font-sans">
+                    {selectedAlert.mitigation_suggestion}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <span className="text-2xs text-surface-500 uppercase font-semibold">Raisons de détection</span>
                 <ul className="mt-1 space-y-1">

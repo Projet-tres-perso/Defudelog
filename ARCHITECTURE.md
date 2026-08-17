@@ -1,209 +1,231 @@
-# DeFuDoLog v2 — Architecture Document
+# DeFuDoLog v2.0 — Architecture Document
 
-## 1. Vision
+## 1. Vision & Objectifs
 
-DeFuDoLog v2 est une **plateforme desktop cross-platform** de détection de fuite de données par analyse de logs. Elle succède au POC Python/Kafka v1 en apportant : moteur embarqué Rust, base SQLite, interface Tauri/React, collecte multi-OS native et configuration unifiée.
+**DeFuDoLog v2.0** est une plateforme desktop native de détection de fuites de données (Data Leak Prevention - DLP) et de gestion des événements de sécurité (SIEM/SOAR).
 
-## 2. Stack technique
+Elle résout les limitations historiques des systèmes à base de règles statiques grâce à un **moteur de détection multi-axes parallélisé** combinant :
+- **L'analyse déterministe DLP** sans latence (mots-clés, regex pré-compilées, PII, secrets, règles SQLite).
+- **Le Log Mining structural (Drain)** avec classification de templates et détection de Zero-Day.
+- **La sémantique vectorielle dense (ONNX / BGE embeddings)** et similarité cosinus avec des profils de menaces.
+- **Le clustering non supervisé (HDBSCAN)** sur fenêtre glissante.
+- **La corrélation temporelle continue par décroissance exponentielle** ($e^{-\lambda t}$).
+- **L'arbitrage contextuel par LLM (SOC Tier-2)** avec extraction chronologique des logs voisins (±10 logs).
 
-| Couche | Technologie | Justification |
-|--------|-------------|---------------|
-| Desktop shell | **Tauri 2.x** | Binaire natif ~5 Mo, accès système complet, cross-platform |
-| Backend | **Rust** | Performance, sécurité mémoire, parallélisme natif |
-| Frontend | **React 18 + TypeScript** | Écosystème mature, typage fort |
-| Base de données | **SQLite (rusqlite)** | Embarquée, zéro config, ACID, WAL |
-| Parsing logs | **Drain-like (Rust)** | Algorithme éprouvé, O(n), porté de Python |
-| ML/Statistique | **fastembed (ONNX) / HDBSCAN** | ML natif (BGE-small), Clustering hiérarchique, Exponential Decay |
-| Kafka | **rdkafka** (optionnel) | Feature-gated, bridge entrée/sortie |
-| LLM | Appels HTTP locaux | LM Studio / Ollama compatibles |
+---
 
-## 3. Architecture logicielle
+## 2. Stack Technique Unifiée
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                    Tauri Process                                  │
-│  ┌─────────────────────┐     ┌─────────────────────────────────┐ │
-│  │   WebView (React)   │     │        Rust Backend             │ │
-│  │                     │     │                                 │ │
-│  │ • Dashboard         │◄───►│ • commands.rs (Tauri API)       │ │
-│  │ • LogViewer         │ IPC │ • engine.rs (Detection Engine)  │ │
-│  │ • Alerts            │     │ • collector.rs (Log Collectors) │ │
-│  │ • Sources           │     │ • db.rs (SQLite Layer)         │ │
-│  │ • Configuration     │     │ • models.rs (Domain Types)     │ │
-│  │ • Reports           │     │ • error.rs (Error Handling)    │ │
-│  └─────────────────────┘     └──────────────┬──────────────────┘ │
-│                                              │                    │
-│                               ┌──────────────┴──────────────┐    │
-│                               │       SQLite Database        │    │
-│                               │  • raw_logs                  │    │
-│                               │  • parsed_logs               │    │
-│                               │  • embeddings                │    │
-│                               │  • clusters                  │    │
-│                               │  • alerts                    │    │
-│                               │  • detection_rules           │    │
-│                               │  • log_sources               │    │
-│                               │  • settings                  │    │
-│                               └──────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────────┘
-```
+| Couche | Technologie | Rôle & Justification |
+|--------|-------------|----------------------|
+| **Desktop Shell** | **Tauri 2.x** | Binaire natif ultra-léger (~15 Mo), zéro runtime Node en prod, sécurité par IPC isolée |
+| **Backend Core** | **Rust (1.75+)** | Performance C-like, sûreté mémoire sans Garbage Collector, parallélisme via Tokio |
+| **Frontend UI** | **React 18 + TypeScript + Tailwind CSS** | Interface SOC moderne, rendu temps réel fluide, graphiques via `Recharts` |
+| **Base de Données** | **SQLite + SQLCipher (AES-256)** | Chiffrement au repos, mode WAL haute concurrence, mmap 256 Mo |
+| **Parser Structural** | **Drain-like Rust + LazyLock Regex** | O(1) extraction de constantes/variables, catalogue de templates critiques/warnings |
+| **IA Sémantique** | **fastembed (ONNX Runtime / BGE-small)** | 384 dimensions denses, exécution locale C++ sans Python ni GPU |
+| **Clustering Outlier** | **HDBSCAN (Rust)** | Regroupement non supervisé par densité adaptative, détection de bruit (-1) |
+| **Surveillance Réseau** | **Tokio UDP/TCP + pnet** | Serveur Syslog RFC 5424 (port 1514) + Sniffer NDR passif |
+| **Interprétation IA** | **API LLM (OpenAI/Ollama/LocalAI/Claude)** | Triage contextuel automatisé SOC Tier-2 |
 
-## 4. Pipeline de détection
+---
 
-```
-Source Logs ──► Collector ──► RawLog ──► Parser (Drain-like) ──► Template
-                 (multi-OS)     │                                    │
-                                │                                    ▼
-                                │                           Embedding (ONNX BGE-small)
-                                │                                    │
-                                │                    ┌───────────────┼───────────────┐
-                                │                    ▼               ▼               ▼
-                                │            Supervised RF        HDBSCAN     Exponential Decay
-                                │                    │               │               │
-                                │                    └───────────────┼───────────────┘
-                                │                                    ▼
-                                │                           Score Fusion
-                                │                           (moy. pondérée)
-                                │                                    │
-                                │                                    ▼
-                                └──────────────────────────► Alert + Rapport LLM
-```
+## 3. Schéma de l'Architecture Multi-Axes
 
-### 4.1 Parsing (Drain-like)
-
-Algorithme inspiré de Drain3, implémenté en Rust pur :
-- Tokenisation avec regex prédéfinis (IP, UUID, dates, nombres, chemins)
-- Recherche du template le plus proche par similarité de tokens
-- Création automatique de nouveaux templates si nécessaire
-- Cache LRU des templates pour limiter la mémoire
-
-### 4.2 Vectorisation (Embeddings BGE via ONNX)
-
-- Utilisation de la librairie `fastembed` (ONNX Runtime).
-- **Initialisation asynchrone** : Le modèle `BAAI/bge-small-en-v1.5` (133 Mo) est téléchargé de manière asynchrone en tâche de fond au premier lancement, sans bloquer l'interface. Un événement Tauri (`ml-loading` / `ml-ready`) informe le frontend.
-- Transforme le texte du log en un vecteur de 384 dimensions.
-
-### 4.3 Clustering HDBSCAN
-
-- Appliqué sur les embeddings BGE (384D).
-- Paramétrage automatique de la densité (contrairement au DBSCAN classique qui nécessite un `eps` fixe).
-- Les outliers (cluster_id = -1) sont marqués comme suspects.
-
-### 4.4 Corrélation Temporelle (Exponential Decay)
-
-- Remplace les fenêtres glissantes arbitraires.
-- Calcul en flux continu : $e^{-\lambda t}$. Plus les événements du même type s'enchaînent vite, plus le score monte dramatiquement.
-- Seuil d'alerte adaptatif.
-
-### 4.5 Fusion des scores
-
-$$
-\text{final\_score} = f(\text{supervised}, \text{hdbscan}, \text{exponential\_decay}, \text{rules})
-$$
-
-Règles de décision :
-```
-IF final_score >= 0.70
-  → alerte_forte
-ELSE IF final_score >= 0.45
-  → alerte_moderee
-ELSE IF final_score >= 0.25
-  → alerte_faible
-ELSE
-  → benign
+```text
+                                 ┌─────────────────────────────────────────────────────────┐
+                                 │                    INGESTION ENTRÉE                     │
+                                 │  • FileWatcher (notify)   • Windows EventLog (wevtutil) │
+                                 │  • Journald (journalctl)  • macOS log (log stream)      │
+                                 │  • Syslog UDP/TCP (1514)  • NDR Sniffer (pnet)          │
+                                 └───────────────────────────┬─────────────────────────────┘
+                                                             │ RawLog + SHA-256 Hash
+                                                             ▼
+                                 ┌─────────────────────────────────────────────────────────┐
+                                 │                 BASE SQLite (SQLCipher)                 │
+                                 │              Persistance immédiate (WAL)                │
+                                 └───────────────────────────┬─────────────────────────────┘
+                                                             │
+                                ┌────────────────────────────┼─────────────────────────────┐
+                                │                            │                             │
+                                ▼                            ▼                             ▼
+                    ┌───────────────────────┐   ┌───────────────────────────┐   ┌───────────────────────────┐
+                    │      AXE DLP BRUT     │   │      AXE STRUCTURAL       │   │       AXE SÉMANTIQUE      │
+                    │   (Direct Raw Log)    │   │        (Drain Parser)     │   │       (ONNX / BGE)        │
+                    │ • Clés RSA/SSH        │   │ • Extraction constantes   │   │ • Embedding 384 dims      │
+                    │ • Tokens & Secrets    │   │ • Template CriticalThreat │   │ • Similarité Cosinus avec │
+                    │ • Regex PII & Pass    │   │ • Template WarningAnomaly │   │   profils cyber-menaces   │
+                    │ • Règles SQLite Dyn   │   │ • Détection Zero-Day      │   │ • HDBSCAN Outlier (-1)    │
+                    └───────────┬───────────┘   └─────────────┬─────────────┘   └─────────────┬─────────────┘
+                                │                             │                               │
+                                └───────────────────────┐     │     ┌─────────────────────────┘
+                                                        │     │     │
+                                                        ▼     ▼     ▼
+                                            ┌───────────────────────────────┐
+                                            │      AXE TEMPOREL (Decay)     │
+                                            │  Score densité : e^(-λ * Δt)  │
+                                            └───────────────┬───────────────┘
+                                                            │
+                                                            ▼
+                                            ┌───────────────────────────────┐
+                                            │   FUSION MULTI-AXES COMPOSITE │
+                                            │  (Pondération 30/20/25/15/10) │
+                                            └───────────────┬───────────────┘
+                                                            │
+                                        ┌───────────────────┴───────────────────┐
+                                        ▼                                       ▼
+                              Score < 0.25 (Bénin)                 Score ≥ 0.25 (Suspect / Alerte)
+                              [Archivé sans bruit]                              │
+                                                                                ▼
+                                                                ┌───────────────────────────────┐
+                                                                │   EXTRACTION DU CONTEXTE      │
+                                                                │  (Logs voisins ±10 sur l'hôte)│
+                                                                └───────────────┬───────────────┘
+                                                                                │
+                                                                                ▼
+                                                                ┌───────────────────────────────┐
+                                                                │  ARBITRAGE CONTEXTUEL LLM     │
+                                                                │  (SOC Tier-2 Validation JSON) │
+                                                                └───────────────┬───────────────┘
+                                                                                │
+                                                    ┌───────────────────────────┴───────────────────────────┐
+                                                    ▼                                                       ▼
+                                        ┌───────────────────────┐                               ┌───────────────────────┐
+                                        │  EXPORT SIEM & WEBHOOK│                               │  RÉPONSE ACTIVE SOAR  │
+                                        │  • CEF / LEEF / RFC5424│                              │  • Script remédiation │
+                                        │  • Slack/Discord/Teams│                               │  • Blocage IP / Host  │
+                                        └───────────────────────┘                               └───────────────────────┘
 ```
 
-## 5. Base de données (SQLite)
+---
 
-### 5.1 Tables principales
+## 4. Modèle Mathématique de Détection & Formules
+
+### 4.1 Corrélation Temporelle (Exponential Decay)
+La densité d'événements pour une catégorie de motif $P$ au temps $t$ est calculée par :
+$$S_{\text{decay}}(P, t) = \sum_{t_i \in \text{Events}(P), t - t_i \le 300} e^{-\lambda (t - t_i)}$$
+avec $\lambda = 0.05$ (demi-vie temporelle d'environ 14 secondes).
+
+### 4.2 Similarité Sémantique Cosinus
+Soit $\vec{u}$ l'embedding BGE du log et $\vec{v}_{\text{menace}}$ le profil de référence (Exfiltration, Privilege Escalation, etc.) :
+$$\text{Sim}(\vec{u}, \vec{v}) = \frac{\vec{u} \cdot \vec{v}}{\|\vec{u}\|_2 \|\vec{v}\|_2} = \frac{\sum_{i=1}^{384} u_i v_i}{\sqrt{\sum u_i^2} \sqrt{\sum v_i^2}}$$
+
+### 4.3 Score de Risque Composite Final
+$$\text{Score}_{\text{composite}} = 0.30 \cdot S_{\text{DLP}} + 0.20 \cdot S_{\text{Template}} + 0.25 \cdot S_{\text{Sémantique}} + 0.15 \cdot S_{\text{Temporel}} + 0.10 \cdot S_{\text{Outlier\_HDBSCAN}}$$
+
+* **Règle d'Override Critique** : Si une signature DLP de criticité `High` ou un template `CriticalThreat` est validé, $\text{Score}_{\text{composite}} \ge 0.85$ immédiatement.
+
+---
+
+## 5. Schéma de la Base de Données (SQLite SQLCipher)
 
 ```sql
-raw_logs (id, source_id, hostname, raw_message, log_hash, timestamp, ingested_at)
-parsed_logs (id, raw_log_id, raw_message, template, template_id, parameters, parsed_at)
-embeddings (id, parsed_log_id, raw_log_id, embedding, dimension, created_at)
-clusters (id, embedding_id, raw_log_id, cluster_id, is_outlier, labeled_at)
-alerts (id, raw_log_id, parsed_log_id, template, supervised_score, anomaly_score,
-        cluster_id, is_outlier, final_score, level, reasons, context_logs,
-        detected_at, acknowledged, acknowledged_at)
-detection_rules (id, name, description, rule_type, pattern, severity, enabled, created_at)
-log_sources (id, name, source_type, hostname, os, enabled, config, created_at, updated_at)
-settings (key, value, updated_at)
+-- 1. Sources de logs surveillées
+CREATE TABLE log_sources (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    hostname TEXT NOT NULL,
+    os TEXT NOT NULL DEFAULT 'unknown',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    config TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+-- 2. Logs bruts ingérés
+CREATE TABLE raw_logs (
+    id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL,
+    hostname TEXT NOT NULL,
+    raw_message TEXT NOT NULL,
+    log_hash TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    ingested_at TEXT NOT NULL,
+    FOREIGN KEY (source_id) REFERENCES log_sources(id)
+);
+CREATE INDEX idx_raw_logs_hash ON raw_logs(log_hash);
+CREATE INDEX idx_raw_logs_timestamp ON raw_logs(timestamp);
+
+-- 3. Logs structurés parsés par Drain
+CREATE TABLE parsed_logs (
+    id TEXT PRIMARY KEY,
+    raw_log_id TEXT NOT NULL UNIQUE,
+    raw_message TEXT NOT NULL,
+    template TEXT NOT NULL,
+    template_id INTEGER NOT NULL,
+    parameters TEXT NOT NULL DEFAULT '[]',
+    parsed_at TEXT NOT NULL,
+    FOREIGN KEY (raw_log_id) REFERENCES raw_logs(id)
+);
+
+-- 4. Embeddings vectoriels BGE
+CREATE TABLE log_embeddings (
+    id TEXT PRIMARY KEY,
+    parsed_log_id TEXT NOT NULL,
+    raw_log_id TEXT NOT NULL,
+    embedding BLOB NOT NULL,
+    dimension INTEGER NOT NULL DEFAULT 384,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (raw_log_id) REFERENCES raw_logs(id)
+);
+
+-- 5. Alertes consolidées
+CREATE TABLE alerts (
+    id TEXT PRIMARY KEY,
+    raw_log_id TEXT NOT NULL,
+    parsed_log_id TEXT,
+    template TEXT,
+    category TEXT NOT NULL DEFAULT 'general',
+    supervised_score REAL,
+    anomaly_score REAL,
+    cluster_id INTEGER,
+    is_outlier INTEGER NOT NULL DEFAULT 0,
+    final_score REAL NOT NULL,
+    level TEXT NOT NULL DEFAULT 'low',
+    reasons TEXT NOT NULL DEFAULT '[]',
+    context_logs TEXT NOT NULL DEFAULT '[]',
+    llm_explanation TEXT,
+    mitigation_suggestion TEXT,
+    detected_at TEXT NOT NULL,
+    acknowledged INTEGER NOT NULL DEFAULT 0,
+    acknowledged_at TEXT,
+    FOREIGN KEY (raw_log_id) REFERENCES raw_logs(id)
+);
+CREATE INDEX idx_alerts_level ON alerts(level);
+CREATE INDEX idx_alerts_time ON alerts(detected_at);
+
+-- 6. Règles de détection dynamiques
+CREATE TABLE detection_rules (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    rule_type TEXT NOT NULL,
+    pattern TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'moderate',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
 ```
 
-### 5.2 Optimisations
+---
 
-- Mode WAL pour lectures concurrentes
-- mmap activé (256 Mo)
-- Index sur `log_hash`, `timestamp`, `level`, `cluster_id`
-- Cache size 64 Mo
-- Foreign keys activées pour l'intégrité référentielle
+## 6. Protocoles d'Exportation SIEM
 
-## 6. Collecteurs multi-OS
+DeFuDoLog implémente des formateurs natifs pour intégrer les alertes dans n'importe quel SIEM d'entreprise :
 
-| OS | Source | Méthode | Dépendance |
-|----|--------|---------|------------|
-| Linux | systemd-journald | `journalctl` ou libsystemd | systemd |
-| Linux | Fichiers | notify (inotify) | kernel |
-| macOS | Unified Log | `log stream` command | macOS 10.12+ |
-| macOS | Fichiers | notify (FSEvents) | kernel |
-| Windows | Event Log | Win32 Event Log API | Windows API |
-| Windows | Fichiers | notify (ReadDirectoryChangesW) | kernel |
-| Tous | Fichiers texte | File watcher générique | crate `notify` |
-| Tous | Kafka | rdkafka consumer | Feature `kafka` |
+1. **CEF (Common Event Format - ArcSight, Splunk)** :
+   `CEF:0|DeFuDoLog|Platform|2.0|DATA_LEAK|Fuite de données suspecte|9|rt=2026-08-15T12:00:00Z cat=data_leak score=0.92 msg=Clé privée RSA exposée`
+2. **LEEF (Log Event Extended Format - IBM QRadar)** :
+   `LEEF:2.0|DeFuDoLog|Platform|2.0|DATA_LEAK|	devTime=2026-08-15T12:00:00Z	cat=data_leak	sev=9	score=0.92	usrMsg=Clé privée RSA exposée`
+3. **Syslog RFC 5424 (Standard IETF)** :
+   `<11>1 2026-08-15T12:00:00Z localhost defudolog - data_leak [alert@defudolog level="high" score="0.92"] Clé privée RSA exposée`
 
-## 7. Interface utilisateur
+---
 
-### 7.1 Pages
+## 7. Sécurité & Confidentialité des Données
 
-| Page | Fonctionnalité |
-|------|----------------|
-| **Dashboard** | Statistiques globales, tendances, répartition alertes |
-| **Logs** | Recherche, filtrage, pagination, vue détaillée avec template |
-| **Alertes** | Liste avec niveau, scores, filtrage, acquittement |
-| **Sources** | Gestion des sources (ajout, activation, arrêt) |
-| **Rapports** | Génération LLM, export JSON |
-| **Configuration** | Paramètres détection, Kafka, LLM, règles |
-
-### 7.2 Design System
-
-- Thème sombre (surface-950 à surface-50)
-- Couleurs fonctionnelles : rouge (haute), ambre (modérée), bleu (basse), émeraude (benign)
-- Typographie : Inter (UI) + JetBrains Mono (logs)
-- Composants : cards, badges, boutons, inputs avec états focus/hover/disabled
-- Animations subtiles, respect de prefers-reduced-motion
-
-## 8. Intégration Kafka (optionnelle)
-
-Feature-gated derrière `#[cfg(feature = "kafka")]` :
-- Lecture depuis un topic Kafka en complément des sources locales
-- Écriture des alertes vers un topic Kafka
-- Configuration SASL/SSL supportée
-
-## 9. Sécurité
-
-- Base de données locale uniquement (pas d'exposition réseau)
-- Interface Tauri avec isolation WebView
-- Kafka : authentification SASL/SSL (si activé)
-- LLM : connexion locale uniquement (LM Studio / Ollama)
-- Pas de collecte de données externes
-
-## 10. Workflow utilisateur
-
-1. **Installation** : Téléchargement du binaire (macOS .dmg, Linux .AppImage, Windows .msi)
-2. **Configuration des sources** : Ajout via l'interface (fichier, journald, etc.)
-3. **Démarrage de la collecte** : Activation des sources
-4. **Visualisation** : Dashboard temps réel, exploration des logs
-5. **Détection** : Automatique à chaque batch, paramétrable
-6. **Investigation** : Consultation des alertes, contexte, scores
-7. **Rapport LLM** : Analyse contextuelle par IA locale (optionnel)
-8. **Export** : Alertes en JSON, base de données portable
-
-## 11. Évolutions futures
-
-- [ ] HDBSCAN pour clustering adaptatif
-- [ ] Modèle BERT/E5 embarqué pour embeddings sémantiques
-- [ ] Streaming Isolation Forest (sans batch)
-- [ ] Plugins de collecteurs (API d'extension)
-- [ ] Alertes par email/webhook
-- [ ] Chiffrement de la base de données (SQLCipher)
-- [ ] Multi-tenant (plusieurs projets/configurations)
-- [ ] Export SIEM (CEF, LEEF, Syslog)
+- **Zéro fuite externe par défaut** : Tout le traitement (DLP, Drain, BGE, HDBSCAN, SQLite) tourne en mémoire locale sur la machine.
+- **Base SQLCipher chiffrée** : Protection des données forensiques au repos contre l'extraction physique de disque.
+- **Sandboxing IPC Tauri** : Aucune injection de script arbitraire n'est possible depuis la WebView.
+- **LLM Local ou Dédié** : Support complet d'instances privées via Ollama, LM Studio ou LocalAI.

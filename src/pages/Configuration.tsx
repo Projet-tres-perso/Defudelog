@@ -7,16 +7,20 @@ import { Save, RotateCcw, Send, Bell, Eye, EyeOff, Brain, Check, X, Server } fro
 export default function Configuration() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [saved, setSaved] = useState(false);
-  const [webhookUrl, setWebhookUrl] = useState("");
   const [webhookTesting, setWebhookTesting] = useState(false);
   const [webhookStatus, setWebhookStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const [soarTesting, setSoarTesting] = useState(false);
+  const [soarStatus, setSoarStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   
   const [llmTesting, setLlmTesting] = useState(false);
   const [llmTestStatus, setLlmTestStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
 
   useEffect(() => {
-    invoke<AppSettings>("get_settings").then(setSettings).catch(console.error);
+    invoke<AppSettings>("get_settings").then((res) => {
+      setSettings(res);
+    }).catch(console.error);
   }, []);
 
   const save = async () => {
@@ -45,9 +49,31 @@ export default function Configuration() {
     setSettings({ ...settings, llm: { ...settings.llm, ...patch } });
   };
 
+  const updateWebhook = (url: string) => {
+    if (!settings) return;
+    setSettings({ ...settings, webhook_url: url });
+  };
+
   const updateSoar = (script: string) => {
     if (!settings) return;
     setSettings({ ...settings, active_response_script: script });
+  };
+
+  const testSoar = async () => {
+    if (!settings?.active_response_script?.trim()) {
+      setSoarStatus({ ok: false, msg: "Veuillez renseigner un script avant de tester." });
+      return;
+    }
+    setSoarTesting(true);
+    setSoarStatus(null);
+    try {
+      const reply = await invoke<string>("test_soar_script", { script: settings.active_response_script });
+      setSoarStatus({ ok: true, msg: reply });
+    } catch (e: any) {
+      setSoarStatus({ ok: false, msg: e?.toString() || "Erreur lors du test du script SOAR" });
+    } finally {
+      setSoarTesting(false);
+    }
   };
 
   const testLlm = async () => {
@@ -55,26 +81,10 @@ export default function Configuration() {
     setLlmTesting(true);
     setLlmTestStatus(null);
     try {
-      const res = await fetch(`${settings.llm.base_url}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(settings.llm.api_key ? { "Authorization": `Bearer ${settings.llm.api_key}` } : {})
-        },
-        body: JSON.stringify({
-          model: settings.llm.model,
-          messages: [{ role: "user", content: "Ping" }],
-          max_tokens: 5,
-        })
-      });
-      if (res.ok) {
-        setLlmTestStatus({ ok: true, msg: "Connexion LLM réussie" });
-      } else {
-        const text = await res.text().catch(() => "");
-        setLlmTestStatus({ ok: false, msg: `Erreur HTTP ${res.status}: ${text.slice(0, 50)}` });
-      }
-    } catch (e) {
-      setLlmTestStatus({ ok: false, msg: "Serveur injoignable ou erreur CORS" });
+      const reply = await invoke<string>("test_llm_connection", { settings: settings.llm });
+      setLlmTestStatus({ ok: true, msg: reply });
+    } catch (e: any) {
+      setLlmTestStatus({ ok: false, msg: e?.toString() || "Erreur de connexion au serveur LLM" });
     } finally {
       setLlmTesting(false);
     }
@@ -241,19 +251,36 @@ export default function Configuration() {
             <div className="card-header flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span>Mitigation Active (SOAR)</span>
-                <InfoTooltip title="SOAR (Security Orchestration, Automation, and Response)" content="Ce script Bash s'exécute automatiquement en arrière-plan lorsqu'une alerte Critique est levée. Utilisez $1 pour l'ID de l'alerte et $2 pour la catégorie de la menace." />
+                <InfoTooltip title="SOAR (Security Orchestration, Automation, and Response)" content="Ce script s'exécute automatiquement en arrière-plan lorsqu'une alerte Critique/Haute est levée. Arguments passés : $1 (ID d'alerte), $2 (Catégorie de menace)." />
               </div>
               <span className="badge bg-red-500/10 text-red-400 text-2xs">Défense Active</span>
             </div>
             <label className="block">
-              <span className="text-xs text-surface-400">Script de remédiation (Bash)</span>
+              <span className="text-xs text-surface-400">Script de remédiation (Bash / PowerShell)</span>
               <textarea
-                className="input mt-1 font-mono text-xs h-40"
+                className="input mt-1 font-mono text-xs h-36"
                 value={settings.active_response_script || ""}
                 onChange={(e) => updateSoar(e.target.value)}
-                placeholder="#!/bin/sh&#10;echo 'Alerte $1 déclenchée'"
+                placeholder="#!/bin/sh&#10;echo 'Alerte $1 déclenchée pour $2' >> /tmp/soar.log"
               />
             </label>
+            <div>
+              <button
+                type="button"
+                onClick={testSoar}
+                disabled={soarTesting}
+                className="btn-secondary text-xs flex items-center gap-1.5"
+              >
+                <Send size={14} className="text-amber-400" />
+                {soarTesting ? "Exécution du test..." : "Tester l'exécution du script SOAR"}
+              </button>
+            </div>
+            {soarStatus && (
+              <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${soarStatus.ok ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-red-500/15 text-red-400 border border-red-500/30"}`}>
+                <Bell size={14} />
+                <span>{soarStatus.msg}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -320,16 +347,21 @@ export default function Configuration() {
                     type="text"
                     className="input flex-1"
                     placeholder="https://hooks.slack.com/services/..."
-                    value={webhookUrl}
-                    onChange={(e) => setWebhookUrl(e.target.value)}
+                    value={settings.webhook_url || ""}
+                    onChange={(e) => updateWebhook(e.target.value)}
                   />
                   <button
                     type="button"
                     onClick={async () => {
+                      const url = settings.webhook_url?.trim() || "";
+                      if (!url) {
+                        setWebhookStatus({ ok: false, msg: "Veuillez renseigner une URL de webhook." });
+                        return;
+                      }
                       setWebhookTesting(true);
                       setWebhookStatus(null);
                       try {
-                        const msg = await invoke<string>("test_webhook", { url: webhookUrl });
+                        const msg = await invoke<string>("test_webhook", { url });
                         setWebhookStatus({ ok: true, msg });
                       } catch (err: unknown) {
                         setWebhookStatus({ ok: false, msg: String(err) });

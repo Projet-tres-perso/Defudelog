@@ -8,7 +8,7 @@ use std::thread;
 
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
-use crate::models::{LogSource, RawLog, SourceType};
+use crate::models::{DiscoveredSource, LogSource, PermissionStatus, RawLog, SourceType};
 use uuid::Uuid;
 
 /// Collecteur de logs unifié — multi-source, multi-OS
@@ -113,24 +113,32 @@ impl LogCollector {
 
             // Fonction pour lire les nouvelles lignes depuis last_pos
             let read_new_lines = |pos: &mut u64| {
-                if let Ok(mut file) = File::open(&file_path) {
-                    let metadata = file.metadata().unwrap();
-                    // Gérer la rotation de fichier (truncate)
-                    if metadata.len() < *pos {
-                        *pos = 0;
-                    }
+                match File::open(&file_path) {
+                    Ok(mut file) => {
+                        if let Ok(metadata) = file.metadata() {
+                            // Gérer la rotation de fichier (truncate)
+                            if metadata.len() < *pos {
+                                *pos = 0;
+                            }
 
-                    if let Ok(_) = file.seek(SeekFrom::Start(*pos)) {
-                        let reader = BufReader::new(file);
-                        for line in reader.lines() {
-                            if let Ok(line) = line {
-                                let line_len = line.len() as u64 + 1; // +1 pour le \n
-                                if !line.trim().is_empty() {
-                                    let _ = Self::ingest_line(&db, &source_id_thread, &hostname, &line);
+                            if let Ok(_) = file.seek(SeekFrom::Start(*pos)) {
+                                let reader = BufReader::new(file);
+                                for line in reader.lines() {
+                                    if let Ok(line) = line {
+                                        let line_len = line.len() as u64 + 1; // +1 pour le \n
+                                        if !line.trim().is_empty() {
+                                            let _ = Self::ingest_line(&db, &source_id_thread, &hostname, &line);
+                                        }
+                                        *pos += line_len;
+                                    }
                                 }
-                                *pos += line_len;
                             }
                         }
+                    },
+                    Err(e) => {
+                        let err_msg = format!("[DEFUDOLOG PERMISSION ERROR] Impossible de lire le fichier source '{}' : {}. Vérifiez les droits d'accès ou l'Accès complet au disque.", file_path.display(), e);
+                        log::error!("{}", err_msg);
+                        let _ = Self::ingest_line(&db, &source_id_thread, &hostname, &err_msg);
                     }
                 }
             };
@@ -314,38 +322,186 @@ impl LogCollector {
         self.running
     }
 
-    /// Liste les sources disponibles sur le système local
-    pub fn discover_local_sources() -> Vec<LogSource> {
+    /// Liste et teste l'accessibilité de toutes les sources de logs critiques sur le système local
+    pub fn discover_local_sources() -> Vec<DiscoveredSource> {
         let mut sources = Vec::new();
+        let current_os = std::env::consts::OS;
+        let hostname = get_hostname();
 
-        // Détection des logs communs
-        let common_log_paths = [
-            ("/var/log/system.log", "macOS System Log"),
-            ("/var/log/syslog", "Linux Syslog"),
-            ("/var/log/auth.log", "Linux Auth Log"),
-            ("/var/log/kern.log", "Linux Kernel Log"),
-            ("/var/log/apache2/access.log", "Apache Access Log"),
-            ("/var/log/nginx/access.log", "Nginx Access Log"),
-            (r"C:\Windows\System32\winevt\Logs\System.evtx", "Windows System Event Log"),
-            (r"C:\Windows\System32\winevt\Logs\Security.evtx", "Windows Security Event Log"),
-            (r"C:\Windows\System32\winevt\Logs\Application.evtx", "Windows Application Event Log"),
-        ];
+        // 1. MAC OS : Unified Log et fichiers systèmes
+        if current_os == "macos" || current_os == "darwin" {
+            // A. Apple Unified Log (Flux live d'authentification et session)
+            sources.push(DiscoveredSource {
+                id: Uuid::new_v4().to_string(),
+                name: "macOS Unified Log (Auth & Sessions)".to_string(),
+                category: "Authentification & Sessions".to_string(),
+                source_type: SourceType::MacOsUnifiedLog {
+                    predicate: Some("process == \"loginwindow\" OR process == \"sudo\" OR subsystem == \"com.apple.LocalAuthentication\"".to_string()),
+                },
+                target_path: "Apple Unified Log (Subsystems: loginwindow, sudo, LocalAuth)".to_string(),
+                hostname: hostname.clone(),
+                os: "macos".to_string(),
+                status: PermissionStatus::Accessible,
+                is_critical_security: true,
+                permission_help: None,
+                config: serde_json::json!({
+                    "predicate": "process == \"loginwindow\" OR process == \"sudo\" OR subsystem == \"com.apple.LocalAuthentication\""
+                }),
+            });
 
-        for (path, name) in &common_log_paths {
-            if Path::new(path).exists() {
-                sources.push(LogSource {
+            // B. Fichiers de logs macOS
+            let macos_log_targets = [
+                ("/var/log/system.log", "macOS System Log", "Système & Daemon", true),
+                ("/var/log/wifi.log", "macOS Wi-Fi & Network Log", "Réseau", false),
+                ("/var/log/install.log", "macOS Package Installer Log", "Installation & Root", true),
+                ("/private/var/log/asl", "Apple System Log Archive (ASL)", "Système", false),
+                ("/private/var/audit", "OpenBSM Security Audit Trail", "Audit Sécurité", true),
+                ("/Library/Logs/DiagnosticReports", "macOS System Panic & Crash Reports", "Anomalie Système", true),
+            ];
+
+            for (path, name, category, is_critical) in &macos_log_targets {
+                let p = Path::new(path);
+                if p.exists() {
+                    let (status, help) = match std::fs::File::open(p) {
+                        Ok(_) => (PermissionStatus::Accessible, None),
+                        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => (
+                            PermissionStatus::PermissionDenied,
+                            Some(format!(
+                                "Accès restreint par macOS. Accordez l'Accès complet au disque dans 'Réglages Système > Confidentialité et sécurité > Accès complet au disque' ou exécutez dans le Terminal : sudo chmod +r {}",
+                                path
+                            )),
+                        ),
+                        Err(_) => (PermissionStatus::NotFound, None),
+                    };
+
+                    sources.push(DiscoveredSource {
+                        id: Uuid::new_v4().to_string(),
+                        name: name.to_string(),
+                        category: category.to_string(),
+                        source_type: SourceType::FileWatcher {
+                            path: path.to_string(),
+                            pattern: "*".to_string(),
+                        },
+                        target_path: path.to_string(),
+                        hostname: hostname.clone(),
+                        os: "macos".to_string(),
+                        status,
+                        is_critical_security: *is_critical,
+                        permission_help: help,
+                        config: serde_json::json!({"path": path}),
+                    });
+                }
+            }
+        }
+
+        // 2. LINUX : systemd-journald et /var/log/*
+        if current_os == "linux" {
+            // A. systemd-journald
+            let journal_available = Path::new("/run/systemd/journal").exists() || Path::new("/var/log/journal").exists();
+            if journal_available {
+                sources.push(DiscoveredSource {
+                    id: Uuid::new_v4().to_string(),
+                    name: "Linux systemd-journald".to_string(),
+                    category: "Système & Services".to_string(),
+                    source_type: SourceType::Journald { unit_filter: None },
+                    target_path: "systemd-journald".to_string(),
+                    hostname: hostname.clone(),
+                    os: "linux".to_string(),
+                    status: PermissionStatus::Accessible,
+                    is_critical_security: true,
+                    permission_help: None,
+                    config: serde_json::json!({}),
+                });
+            }
+
+            // B. Fichiers standards Linux
+            let linux_log_targets = [
+                ("/var/log/auth.log", "Linux Authentication Log (Debian/Ubuntu)", "Authentification & PAM", true),
+                ("/var/log/secure", "Linux Security & Auth Log (RHEL/CentOS)", "Authentification & PAM", true),
+                ("/var/log/audit/audit.log", "Linux Audit Daemon (auditd)", "Audit Sécurité Kernel", true),
+                ("/var/log/syslog", "Linux System Log (Syslog)", "Système Général", false),
+                ("/var/log/messages", "Linux Messages Log (RHEL/CentOS)", "Système Général", false),
+                ("/var/log/kern.log", "Linux Kernel Messages", "Noyau & Matériel", true),
+                ("/var/log/ufw.log", "UFW Firewall Log", "Pare-feu & Réseau", false),
+                ("/var/log/nginx/access.log", "Nginx Web Server Access", "Serveur Web", false),
+                ("/var/log/nginx/error.log", "Nginx Web Server Error", "Serveur Web", true),
+                ("/var/log/apache2/access.log", "Apache Web Server Access", "Serveur Web", false),
+                ("/var/log/apache2/error.log", "Apache Web Server Error", "Serveur Web", true),
+            ];
+
+            for (path, name, category, is_critical) in &linux_log_targets {
+                let p = Path::new(path);
+                if p.exists() {
+                    let (status, help) = match std::fs::File::open(p) {
+                        Ok(_) => (PermissionStatus::Accessible, None),
+                        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => (
+                            PermissionStatus::PermissionDenied,
+                            Some(format!(
+                                "Droits d'accès insuffisants sous Linux. Ajoutez votre utilisateur aux groupes d'administration : 'sudo usermod -aG adm,systemd-journal $USER' puis redémarrez votre session, ou lancez : sudo chmod +r {}",
+                                path
+                            )),
+                        ),
+                        Err(_) => (PermissionStatus::NotFound, None),
+                    };
+
+                    sources.push(DiscoveredSource {
+                        id: Uuid::new_v4().to_string(),
+                        name: name.to_string(),
+                        category: category.to_string(),
+                        source_type: SourceType::FileWatcher {
+                            path: path.to_string(),
+                            pattern: "*".to_string(),
+                        },
+                        target_path: path.to_string(),
+                        hostname: hostname.clone(),
+                        os: "linux".to_string(),
+                        status,
+                        is_critical_security: *is_critical,
+                        permission_help: help,
+                        config: serde_json::json!({"path": path}),
+                    });
+                }
+            }
+        }
+
+        // 3. WINDOWS : Event Logs (Security, System, PowerShell, Sysmon)
+        if current_os == "windows" {
+            let win_channels = [
+                ("Security", "Windows Security Event Log (Logons, Privileges)", "Authentification & Sécurité", true, true),
+                ("System", "Windows System Event Log", "Système & Services", false, false),
+                ("Application", "Windows Application Event Log", "Applications", false, false),
+                ("Microsoft-Windows-PowerShell/Operational", "PowerShell Script Execution Log", "Exécution de Scripts", true, false),
+                ("Microsoft-Windows-Sysmon/Operational", "Sysmon Deep Telemetry Log", "Télémétrie Avancée", true, true),
+            ];
+
+            for (channel, name, category, is_critical, requires_admin) in &win_channels {
+                let status = if *requires_admin {
+                    PermissionStatus::RequiresElevation
+                } else {
+                    PermissionStatus::Accessible
+                };
+
+                let help = if *requires_admin {
+                    Some("Le journal Windows Security requiert des privilèges Administrateur. Lancez DeFuDoLog en faisant 'Clic droit > Exécuter en tant qu'administrateur'.".to_string())
+                } else {
+                    None
+                };
+
+                sources.push(DiscoveredSource {
                     id: Uuid::new_v4().to_string(),
                     name: name.to_string(),
-                    source_type: SourceType::FileWatcher {
-                        path: path.to_string(),
-                        pattern: "*".to_string(),
+                    category: category.to_string(),
+                    source_type: SourceType::WindowsEventLog {
+                        channel: channel.to_string(),
+                        query: None,
                     },
-                    hostname: get_hostname(),
-                    os: std::env::consts::OS.to_string(),
-                    enabled: false,
-                    config: serde_json::json!({"path": path}),
-                    created_at: Utc::now(),
-                    updated_at: Utc::now(),
+                    target_path: format!("EventLog Channel: {}", channel),
+                    hostname: hostname.clone(),
+                    os: "windows".to_string(),
+                    status,
+                    is_critical_security: *is_critical,
+                    permission_help: help,
+                    config: serde_json::json!({"channel": channel}),
                 });
             }
         }
@@ -365,6 +521,12 @@ fn get_hostname() -> String {
                 buf.truncate(end);
                 return String::from_utf8_lossy(&buf).to_string();
             }
+        }
+    }
+    #[cfg(windows)]
+    {
+        if let Ok(h) = std::env::var("COMPUTERNAME") {
+            return h;
         }
     }
     "localhost".to_string()

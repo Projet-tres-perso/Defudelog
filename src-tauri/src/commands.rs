@@ -74,10 +74,48 @@ pub fn delete_log_source(state: State<'_, AppState>, source_id: String) -> Resul
 }
 
 #[tauri::command]
-pub fn auto_discover_host_sources(_state: State<'_, AppState>) -> Result<Vec<LogSource>, String> {
+pub fn auto_discover_host_sources(_state: State<'_, AppState>) -> Result<Vec<DiscoveredSource>, String> {
     let discovered = crate::collector::LogCollector::discover_local_sources();
-    // Suggestion mode: return the discovered sources without inserting them automatically.
     Ok(discovered)
+}
+
+#[tauri::command]
+pub fn check_source_permission(_state: State<'_, AppState>, path: String) -> Result<serde_json::Value, String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Ok(serde_json::json!({
+            "status": "not_found",
+            "readable": false,
+            "message": "Le fichier spécifié n'existe pas sur le système."
+        }));
+    }
+
+    match std::fs::File::open(p) {
+        Ok(_) => Ok(serde_json::json!({
+            "status": "accessible",
+            "readable": true,
+            "message": "Fichier accessible en lecture."
+        })),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            let os = std::env::consts::OS;
+            let help = match os {
+                "macos" | "darwin" => format!("Accès refusé par macOS. Accordez l'Accès complet au disque dans 'Réglages Système > Confidentialité et sécurité > Accès complet au disque' ou lancez dans le Terminal : sudo chmod +r {}", path),
+                "linux" => format!("Accès refusé sous Linux. Ajoutez votre compte aux groupes d'audit : 'sudo usermod -aG adm,systemd-journal $USER' ou lancez : sudo chmod +r {}", path),
+                "windows" => "Accès refusé sous Windows. Lancez l'application en mode Administrateur ('Exécuter en tant qu'administrateur').".to_string(),
+                _ => "Permissions insuffisantes pour lire ce fichier.".to_string(),
+            };
+            Ok(serde_json::json!({
+                "status": "permission_denied",
+                "readable": false,
+                "message": help
+            }))
+        },
+        Err(e) => Ok(serde_json::json!({
+            "status": "error",
+            "readable": false,
+            "message": format!("Erreur d'accès : {}", e)
+        })),
+    }
 }
 
 #[tauri::command]
@@ -327,6 +365,90 @@ pub fn export_alerts_siem(state: State<'_, AppState>, format: String) -> Result<
 pub async fn test_webhook(url: String) -> Result<String, String> {
     crate::webhook_notifier::WebhookNotifier::test_webhook_url(&url).await?;
     Ok("Notification de test envoyée avec succès !".to_string())
+}
+
+#[tauri::command]
+pub async fn test_llm_connection(settings: LlmSettings) -> Result<String, String> {
+    if settings.base_url.trim().is_empty() {
+        return Err("L'URL de base du LLM ne peut pas être vide.".to_string());
+    }
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => return Err(format!("Erreur initialisation client HTTP: {}", e)),
+    };
+
+    let base_url = settings.base_url.trim_end_matches('/');
+    let api_url = if base_url.ends_with("/chat/completions") {
+        base_url.to_string()
+    } else if base_url.ends_with("/v1") {
+        format!("{}/chat/completions", base_url)
+    } else {
+        // Essayer /chat/completions par défaut
+        format!("{}/chat/completions", base_url)
+    };
+
+    let model_name = if settings.model.trim().is_empty() {
+        "llama3"
+    } else {
+        settings.model.trim()
+    };
+
+    let mut req = client.post(&api_url).json(&serde_json::json!({
+        "model": model_name,
+        "messages": [
+            {"role": "system", "content": "Tu es un assistant de test. Réponds 'OK'."},
+            {"role": "user", "content": "Ping"}
+        ],
+        "max_tokens": 10,
+        "temperature": 0.1
+    }));
+
+    if !settings.api_key.trim().is_empty() {
+        req = req.header("Authorization", format!("Bearer {}", settings.api_key.trim()));
+    }
+
+    match req.send().await {
+        Ok(res) => {
+            if res.status().is_success() {
+                let json_res: Result<serde_json::Value, _> = res.json().await;
+                if let Ok(val) = json_res {
+                    let reply = val["choices"][0]["message"]["content"]
+                        .as_str()
+                        .unwrap_or("Connexion réussie")
+                        .trim();
+                    Ok(format!("Connexion réussie ! Réponse du modèle ({}) : \"{}\"", model_name, reply))
+                } else {
+                    Ok(format!("Connexion réussie au serveur LLM (Modèle: {})", model_name))
+                }
+            } else {
+                let status = res.status();
+                let err_text = res.text().await.unwrap_or_default();
+                Err(format!("Erreur serveur LLM HTTP {} : {}", status, err_text.chars().take(120).collect::<String>()))
+            }
+        }
+        Err(e) => {
+            Err(format!("Impossible de joindre le serveur LLM à '{}' : {}. Vérifiez que le serveur (Ollama / LM Studio / LocalAI) est démarré.", api_url, e))
+        }
+    }
+}
+
+#[tauri::command]
+pub fn test_soar_script(script: String) -> Result<String, String> {
+    if script.trim().is_empty() {
+        return Err("Le contenu du script SOAR ne peut pas être vide.".to_string());
+    }
+    crate::active_response::ActiveResponseEngine::execute_script(
+        &script,
+        "TEST-ALERT-001",
+        "data_leak",
+    )
+    .map_err(|e| format!("Erreur lors de l'exécution du script SOAR: {}", e))?;
+
+    Ok("Script SOAR de test exécuté avec succès en tâche de fond !".to_string())
 }
 
 #[tauri::command]

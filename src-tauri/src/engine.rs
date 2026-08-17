@@ -26,15 +26,20 @@ static PARAM_PATTERNS: LazyLock<Vec<CompiledPattern>> = LazyLock::new(|| {
         CompiledPattern { regex: regex::Regex::new(r"\b\d{4}-\d{2}-\d{2}\b").unwrap(), replacement: "<DATE>" },
         CompiledPattern { regex: regex::Regex::new(r"\b\d{2}:\d{2}:\d{2}\b").unwrap(), replacement: "<TIME>" },
         CompiledPattern { regex: regex::Regex::new(r"\b\d+\b").unwrap(), replacement: "<NUM>" },
-        CompiledPattern { regex: regex::Regex::new(r"(?<=/)[^/\s]+(?:\.[a-zA-Z0-9]+)?(?=\s|$)").unwrap(), replacement: "<FILE>" },
+        CompiledPattern { regex: regex::Regex::new(r"/[a-zA-Z0-9_\.\-]+(?:/[a-zA-Z0-9_\.\-]+)*").unwrap(), replacement: "<PATH>" },
     ]
 });
 
 static DLP_SIGNATURES: LazyLock<Vec<(regex::Regex, &'static str, AlertLevel)>> = LazyLock::new(|| {
     vec![
         (
-            regex::Regex::new(r"(?i)-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----").unwrap(),
+            regex::Regex::new(r"(?i)(?:-----)?BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY(?:-----)?").unwrap(),
             "Clé privée RSA / SSH exposée dans les logs",
+            AlertLevel::High,
+        ),
+        (
+            regex::Regex::new(r"(?i)(?:credit_card|credit[_\s-]?cards|\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b)").unwrap(),
+            "Numéros de carte bancaire ou données de paiement exposées",
             AlertLevel::High,
         ),
         (
@@ -61,6 +66,11 @@ static DLP_SIGNATURES: LazyLock<Vec<(regex::Regex, &'static str, AlertLevel)>> =
             regex::Regex::new(r"(?i)(?:chmod\s+777|chown\s+root)\s+/etc/").unwrap(),
             "Élévation de privilèges ou altération de permissions critiques",
             AlertLevel::High,
+        ),
+        (
+            regex::Regex::new(r"(?i)(?:out of memory|kernel panic|fatal error|segmentation fault|segfault)").unwrap(),
+            "Crash critique ou panne système",
+            AlertLevel::Moderate,
         ),
         (
             regex::Regex::new(r"(?i)(?:curl|wget)\s+.*\|\s*(?:sh|bash|zsh)").unwrap(),
@@ -698,6 +708,42 @@ impl DetectionPipeline {
         }
     }
 
+    /// Constructeur autonome pour les tests et exécutions headless (sans fenêtre Tauri active)
+    pub fn new_headless(db: Arc<Database>, settings: DetectionSettings) -> Self {
+        let correlator = TimeCorrelator::new(
+            settings.time_window_seconds,
+            settings.event_threshold,
+        );
+        let parser = LogParser::new(10000);
+        let rule_engine = RuleEngine::new(db.clone(), &settings);
+        
+        let text_embedding_model = Arc::new(parking_lot::Mutex::new(None));
+        let semantic_matcher = SemanticThreatMatcher::new(text_embedding_model.clone());
+
+        // Chargement synchrone / direct du modèle pour le test si disponible
+        let model_clone = text_embedding_model.clone();
+        std::thread::spawn(move || {
+            if let Ok(model) = TextEmbedding::try_new(InitOptions::new(EmbeddingModel::BGESmallENV15)) {
+                *model_clone.lock() = Some(model);
+            }
+        });
+
+        let app_settings = Arc::new(parking_lot::Mutex::new(db.get_settings().unwrap_or_default()));
+
+        Self {
+            parser,
+            rule_engine,
+            time_correlator: correlator,
+            semantic_matcher,
+            db: db.clone(),
+            settings,
+            app_settings,
+            active_response: crate::active_response::ActiveResponseEngine::new(db),
+            text_embedding_model,
+            recent_embeddings: VecDeque::with_capacity(100),
+        }
+    }
+
     /// Processus complet de détection multi-axes sur chaque log entrant
     pub fn process_log(
         &mut self,
@@ -766,6 +812,8 @@ impl DetectionPipeline {
                 if *severity == AlertLevel::High {
                     is_critical_hit = true;
                     dlp_score = 1.0;
+                } else if *severity == AlertLevel::Moderate {
+                    dlp_score = dlp_score.max(0.85);
                 }
                 reasons.push(reason.clone());
             }
@@ -777,17 +825,43 @@ impl DetectionPipeline {
             reasons.push(reason);
         }
 
-        // 5. AXE SÉMANTIQUE : Embedding vectoriel BGE & Similarité avec menaces types
+        // 5. AXE SÉMANTIQUE & CLUSTERING HDBSCAN : Embedding vectoriel BGE (ONNX) + HDBSCAN Outlier
         self.semantic_matcher.init_reference_embeddings();
+        let mut is_outlier = false;
+        let mut outlier_score = 0.0f64;
+
         if let Some(ref mut model) = *self.text_embedding_model.lock() {
             if let Ok(mut embeddings) = model.embed(vec![raw_message.to_string()], None) {
                 if let Some(vec_f32) = embeddings.pop() {
-                    let vec_f64: Vec<f64> = vec_f32.into_iter().map(|v| v as f64).collect();
+                    let vec_f64: Vec<f64> = vec_f32.iter().map(|v| *v as f64).collect();
                     
+                    // A. Similarité sémantique cosinus avec menaces de référence
                     if let Some((similarity, _cat, threat_desc)) = self.semantic_matcher.match_threat(&vec_f64) {
                         semantic_score = similarity;
                         if similarity >= 0.70 {
                             reasons.push(format!("Forte similarité sémantique ({:.0}%) avec: {}", similarity * 100.0, threat_desc));
+                        }
+                    }
+
+                    // B. Clustering non supervisé HDBSCAN sur fenêtre glissante (60 derniers logs)
+                    self.recent_embeddings.push_back((raw_log.id.clone(), vec_f64.clone()));
+                    if self.recent_embeddings.len() > 60 {
+                        self.recent_embeddings.pop_front();
+                    }
+
+                    if self.recent_embeddings.len() >= 15 {
+                        let data: Vec<Vec<f32>> = self.recent_embeddings.iter()
+                            .map(|(_, v)| v.iter().map(|f| *f as f32).collect())
+                            .collect();
+
+                        if let Ok(clusterer) = hdbscan::Hdbscan::default_hyper_params(&data).cluster() {
+                            if let Some(last_label) = clusterer.last() {
+                                if *last_label == -1 {
+                                    is_outlier = true;
+                                    outlier_score = 0.60;
+                                    reasons.push("Anomalie sémantique non supervisée détectée (Outlier HDBSCAN / Vecteur isolé)".to_string());
+                                }
+                            }
                         }
                     }
 
@@ -805,10 +879,11 @@ impl DetectionPipeline {
         }
 
         // 6. FUSION MULTI-AXES & SCORE DE RISQUE COMPOSITE
-        let mut composite_score = (dlp_score * 0.35)
-            + (template_score * 0.25)
+        let mut composite_score = (dlp_score * 0.30)
+            + (template_score * 0.20)
             + (semantic_score * 0.25)
-            + (time_score * 0.15);
+            + (time_score * 0.15)
+            + (outlier_score * 0.10);
 
         if is_critical_hit {
             composite_score = composite_score.max(0.85);
@@ -816,16 +891,16 @@ impl DetectionPipeline {
 
         let alert_level = if composite_score >= 0.70 {
             AlertLevel::High
-        } else if composite_score >= 0.45 {
+        } else if composite_score >= 0.35 {
             AlertLevel::Moderate
-        } else if composite_score >= 0.25 {
+        } else if composite_score >= 0.20 {
             AlertLevel::Low
         } else {
             AlertLevel::Benign
         };
 
         // 7. CRÉATION D'ALERTE ET VALIDATION CONTEXTUELLE LLM
-        if alert_level != AlertLevel::Benign || !reasons.is_empty() {
+        if alert_level != AlertLevel::Benign {
             let category = categorize_threat(raw_message, &reasons);
             
             // Extraction des logs voisins pour l'analyse de contexte
@@ -867,7 +942,7 @@ impl DetectionPipeline {
                 supervised_score: Some(semantic_score),
                 anomaly_score: Some(template_score),
                 cluster_id: None,
-                is_outlier: false,
+                is_outlier,
                 final_score: composite_score,
                 level: alert_level,
                 reasons,
@@ -887,16 +962,20 @@ impl DetectionPipeline {
             }
 
             // Webhook notification
-            let alert_clone = alert.clone();
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().ok();
-                if let Some(runtime) = rt {
-                    // Si un webhook URL est configuré dans les variables ou settings
-                    if let Ok(webhook_url) = std::env::var("DEFUDOLOG_WEBHOOK_URL") {
-                        let _ = runtime.block_on(crate::webhook_notifier::WebhookNotifier::send_alert_notification(&webhook_url, &alert_clone));
-                    }
+            let webhook_target = app_settings.webhook_url.clone()
+                .or_else(|| std::env::var("DEFUDOLOG_WEBHOOK_URL").ok());
+
+            if let Some(webhook_url) = webhook_target {
+                if !webhook_url.trim().is_empty() {
+                    let alert_clone = alert.clone();
+                    std::thread::spawn(move || {
+                        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().ok();
+                        if let Some(runtime) = rt {
+                            let _ = runtime.block_on(crate::webhook_notifier::WebhookNotifier::send_alert_notification(&webhook_url, &alert_clone));
+                        }
+                    });
                 }
-            });
+            }
 
             Ok(Some(alert))
         } else {

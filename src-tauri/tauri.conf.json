@@ -29,6 +29,15 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/64x64.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
     "category": "DeveloperTool",
     "shortDescription": "Plateforme de détection de fuite de données",
     "longDescription": "DeFuDoLog est une plateforme desktop de détection de fuite de données par analyse multi-couche de logs (parsing, embeddings, clustering, détection d'anomalies)."

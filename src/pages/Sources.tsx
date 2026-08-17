@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { LogSource, NetworkNode } from "@/types";
+import type { LogSource, NetworkNode, DiscoveredSource } from "@/types";
 import {
   Plus, Trash2, Play, Pause, Server, FolderOpen,
-  Monitor, HardDrive, Radio, LucideIcon, Cpu, Globe, Zap, Check, X
+  Monitor, HardDrive, Radio, LucideIcon, Cpu, Globe, Zap, Check, X,
+  ShieldAlert, ShieldCheck, AlertTriangle, Copy, Terminal, Info
 } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 
@@ -29,7 +30,8 @@ export default function Sources() {
   const [nodes, setNodes] = useState<NetworkNode[]>([]);
   const [syslogRunning, setSyslogRunning] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [suggestions, setSuggestions] = useState<LogSource[]>([]);
+  const [suggestions, setSuggestions] = useState<DiscoveredSource[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   
   // New Source Form State
   const [newName, setNewName] = useState("");
@@ -76,18 +78,25 @@ export default function Sources() {
 
   const autoDiscover = async () => {
     try {
-      const discovered = await invoke<LogSource[]>("auto_discover_host_sources");
+      const discovered = await invoke<DiscoveredSource[]>("auto_discover_host_sources");
       setSuggestions(discovered);
     } catch (e) {
       console.error(e);
     }
   };
 
-  const acceptSuggestion = async (suggestion: LogSource) => {
+  const copyPermissionCmd = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2500);
+  };
+
+  const acceptSuggestion = async (suggestion: DiscoveredSource) => {
     try {
+      const srcType = formatSourceType(suggestion.source_type);
       await invoke("add_log_source", {
         name: suggestion.name,
-        sourceType: "file_watcher",
+        sourceType: srcType,
         hostname: suggestion.hostname,
         os: suggestion.os,
         config: suggestion.config,
@@ -242,32 +251,119 @@ export default function Sources() {
         </div>
       )}
 
-      {/* Suggestions Auto-découverte */}
+      {/* Suggestions Auto-découverte avec État des Permissions */}
       {suggestions.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-semibold text-sm text-surface-300 flex items-center gap-2">
-            <Zap size={16} className="text-amber-400" />
-            Sources détectées à configurer ({suggestions.length})
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {suggestions.map((sug) => (
-              <div key={sug.id} className="card flex flex-col justify-between border-amber-500/30 bg-amber-500/5">
-                <div className="mb-3">
-                  <p className="font-medium text-sm text-amber-100">{sug.name}</p>
-                  <p className="text-xs text-surface-400 mt-1 truncate" title={(sug.config as any)?.path as string}>
-                    {((sug.config as any)?.path as string) || formatSourceType(sug.source_type)}
-                  </p>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm text-surface-300 flex items-center gap-2">
+              <Zap size={16} className="text-amber-400" />
+              Sources détectées sur cet hôte ({suggestions.length})
+            </h3>
+            <button
+              onClick={() => suggestions.forEach(s => { if (s.status === "accessible") acceptSuggestion(s); })}
+              className="btn-ghost text-xs text-primary-400 hover:text-primary-300"
+            >
+              Ajouter toutes les sources accessibles
+            </button>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {suggestions.map((sug) => {
+              const isAccessible = sug.status === "accessible";
+              const isDenied = sug.status === "permission_denied";
+              const isElevation = sug.status === "requires_elevation";
+
+              return (
+                <div
+                  key={sug.id}
+                  className={`card flex flex-col justify-between border ${
+                    isAccessible
+                      ? "border-emerald-500/30 bg-emerald-500/5"
+                      : isDenied
+                      ? "border-red-500/40 bg-red-500/5"
+                      : "border-amber-500/40 bg-amber-500/5"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-sm text-surface-100">{sug.name}</p>
+                          {sug.is_critical_security && (
+                            <span className="badge bg-red-500/20 text-red-400 text-2xs">Sécurité Critique</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-surface-400 mt-0.5">{sug.category}</p>
+                      </div>
+                      <span
+                        className={`badge text-2xs flex items-center gap-1 ${
+                          isAccessible
+                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                            : isDenied
+                            ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                            : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                        }`}
+                      >
+                        {isAccessible && <ShieldCheck size={12} />}
+                        {isDenied && <ShieldAlert size={12} />}
+                        {isElevation && <AlertTriangle size={12} />}
+                        {isAccessible ? "Accessible" : isDenied ? "Permissions Requises" : "Admin Requis"}
+                      </span>
+                    </div>
+
+                    <div className="bg-surface-900/60 rounded px-2.5 py-1.5 font-mono text-xs text-surface-300 break-all mb-2 border border-surface-800">
+                      {sug.target_path}
+                    </div>
+
+                    {/* Instructions de déblocage si permission_denied */}
+                    {sug.permission_help && (
+                      <div className="bg-surface-950/80 border border-surface-800 rounded p-2.5 mb-3 text-xs">
+                        <div className="flex items-center justify-between text-amber-400 mb-1 font-medium">
+                          <span className="flex items-center gap-1">
+                            <Terminal size={13} />
+                            Action requise pour autoriser l'accès :
+                          </span>
+                          <button
+                            onClick={() => copyPermissionCmd(sug.id, sug.permission_help || "")}
+                            className="text-xs text-surface-400 hover:text-surface-200 flex items-center gap-1"
+                            title="Copier"
+                          >
+                            <Copy size={12} />
+                            {copiedId === sug.id ? "Copié !" : "Copier"}
+                          </button>
+                        </div>
+                        <p className="text-surface-300 font-sans leading-relaxed">
+                          {sug.permission_help}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-surface-800/60">
+                    <span className="text-2xs text-surface-500">
+                      OS: <span className="capitalize">{sug.os}</span> · Hôte: {sug.hostname}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSuggestions(prev => prev.filter(s => s.id !== sug.id))}
+                        className="btn-ghost text-xs py-1 px-2.5 text-surface-400 hover:text-surface-200"
+                      >
+                        Ignorer
+                      </button>
+                      <button
+                        onClick={() => acceptSuggestion(sug)}
+                        className={`text-xs py-1 px-3 rounded font-medium transition-colors ${
+                          isAccessible
+                            ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                            : "bg-surface-700 hover:bg-surface-600 text-surface-200"
+                        }`}
+                      >
+                        {isAccessible ? "Surveiller cette source" : "Ajouter quand même"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <button onClick={() => setSuggestions(prev => prev.filter(s => s.id !== sug.id))} className="btn-ghost text-xs py-1 px-2">
-                    Ignorer
-                  </button>
-                  <button onClick={() => acceptSuggestion(sug)} className="btn-primary text-xs py-1 px-2">
-                    Ajouter
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

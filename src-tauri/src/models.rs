@@ -71,6 +71,31 @@ pub enum SourceType {
     Kafka { topic: String, brokers: Vec<String> },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionStatus {
+    Accessible,
+    PermissionDenied,
+    NotFound,
+    RequiresElevation,
+}
+
+/// Source de log découverte automatiquement avec son état d'accessibilité
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveredSource {
+    pub id: String,
+    pub name: String,
+    pub category: String,
+    pub source_type: SourceType,
+    pub target_path: String,
+    pub hostname: String,
+    pub os: String,
+    pub status: PermissionStatus,
+    pub is_critical_security: bool,
+    pub permission_help: Option<String>,
+    pub config: serde_json::Value,
+}
+
 impl std::fmt::Display for SourceType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -216,6 +241,7 @@ pub struct AppSettings {
     pub detection: DetectionSettings,
     pub kafka: Option<KafkaSettings>,
     pub llm: Option<LlmSettings>,
+    pub webhook_url: Option<String>,
     pub active_response_script: Option<String>,
 }
 
@@ -267,6 +293,7 @@ impl Default for AppSettings {
             },
             kafka: None,
             llm: None,
+            webhook_url: None,
             active_response_script: Some(
 "#!/bin/sh
 # Script de remédiation SOAR (Active Response)

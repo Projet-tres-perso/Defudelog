@@ -9,6 +9,22 @@ export interface NetworkNode {
   os: string;
 }
 
+export type PermissionStatus = "accessible" | "permission_denied" | "not_found" | "requires_elevation";
+
+export interface DiscoveredSource {
+  id: string;
+  name: string;
+  category: string;
+  source_type: unknown;
+  target_path: string;
+  hostname: string;
+  os: string;
+  status: PermissionStatus;
+  is_critical_security: boolean;
+  permission_help: string | null;
+  config: Record<string, unknown>;
+}
+
 export interface LogSource {
   id: string;
   name: string;
@@ -55,6 +71,8 @@ export interface Alert {
   level: AlertLevel;
   reasons: string[];
   context_logs: string[];
+  llm_explanation?: string | null;
+  mitigation_suggestion?: string | null;
   detected_at: string;
   acknowledged: boolean;
   acknowledged_at: string | null;
@@ -101,6 +119,7 @@ export interface AppSettings {
   detection: DetectionSettings;
   kafka: KafkaSettings | null;
   llm: LlmSettings | null;
+  webhook_url?: string | null;
   active_response_script: string | null;
 }
 

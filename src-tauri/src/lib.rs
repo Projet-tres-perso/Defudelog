@@ -1,14 +1,14 @@
-mod models;
-mod db;
-mod error;
-mod collector;
-mod engine;
-mod syslog_listener;
-mod siem_exporter;
-mod webhook_notifier;
-mod active_response;
-mod commands;
-mod network;
+pub mod models;
+pub mod db;
+pub mod error;
+pub mod collector;
+pub mod engine;
+pub mod syslog_listener;
+pub mod siem_exporter;
+pub mod webhook_notifier;
+pub mod active_response;
+pub mod commands;
+pub mod network;
 
 use db::Database;
 use engine::DetectionPipeline;
@@ -88,6 +88,7 @@ pub fn run() {
             commands::toggle_log_source,
             commands::delete_log_source,
             commands::auto_discover_host_sources,
+            commands::check_source_permission,
             commands::get_network_nodes,
             commands::start_syslog_server,
             commands::stop_syslog_server,
@@ -112,6 +113,8 @@ pub fn run() {
             commands::generate_demo_logs,
             commands::export_alerts_siem,
             commands::test_webhook,
+            commands::test_llm_connection,
+            commands::test_soar_script,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DeFuDoLog");
