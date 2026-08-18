@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import type { DashboardStats, Alert, RawLog, AlertCategory, TimeSeriesPoint } from "@/types";
 import {
   AlertTriangle, ScrollText, Radio, Activity,
   ShieldAlert, KeyRound, Cpu, Lock, Play, Pause,
-  RefreshCw, Terminal, ChevronRight, ShieldCheck,
+  RefreshCw, Terminal, Globe, ShieldCheck, ShieldAlert as ShieldIcon,
+  Zap, ExternalLink
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -14,8 +16,28 @@ export default function Dashboard() {
   const [recentAlerts, setRecentAlerts] = useState<Alert[]>([]);
   const [recentLogs, setRecentLogs] = useState<RawLog[]>([]);
   const [isMonitoring, setIsMonitoring] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [monitoringLoading, setMonitoringLoading] = useState(false);
+  const [logFilter, setLogFilter] = useState<"all" | "local" | "network">("all");
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+
+  const checkAdminStatus = async () => {
+    try {
+      const admin = await invoke<boolean>("check_is_admin");
+      setIsAdmin(admin);
+    } catch (e) {
+      console.warn("Erreur check_is_admin:", e);
+      setIsAdmin(false);
+    }
+  };
+
+  const handleRelaunchAdmin = async () => {
+    try {
+      await invoke("relaunch_as_admin");
+    } catch (e) {
+      alert("Erreur lors de la demande d'élévation: " + String(e));
+    }
+  };
 
   const fetchAllData = async () => {
     try {
@@ -28,7 +50,7 @@ export default function Dashboard() {
       const alertsRes = await invoke<{ alerts: Alert[] }>("get_alerts", { level: null, page: 1, perPage: 6 });
       setRecentAlerts(alertsRes.alerts || []);
 
-      const logsRes = await invoke<[RawLog[], number]>("get_raw_logs", { limit: 6, offset: 0, query: null, sourceId: null });
+      const logsRes = await invoke<[RawLog[], number]>("get_raw_logs", { limit: 12, offset: 0, query: null, sourceId: null });
       if (Array.isArray(logsRes) && logsRes[0]) {
         setRecentLogs(logsRes[0]);
       } else if (Array.isArray(logsRes)) {
@@ -45,9 +67,26 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
+    checkAdminStatus();
     fetchAllData();
-    const interval = setInterval(fetchAllData, 2500); // 2.5s real-time polling
-    return () => clearInterval(interval);
+
+    // Polling régulier de sécurité
+    const interval = setInterval(fetchAllData, 2500);
+
+    // Écoute réactive en direct des nouveaux logs ingérés par le backend
+    let unlistenFn: (() => void) | undefined;
+    listen<RawLog>("log-ingested", (event) => {
+      if (event.payload) {
+        setRecentLogs((prev) => [event.payload, ...prev.slice(0, 11)]);
+      }
+    }).then((unlisten) => {
+      unlistenFn = unlisten;
+    }).catch((e) => console.warn("Erreur listen log-ingested:", e));
+
+    return () => {
+      clearInterval(interval);
+      if (unlistenFn) unlistenFn();
+    };
   }, []);
 
   const toggleMonitoring = async () => {
@@ -68,7 +107,19 @@ export default function Dashboard() {
     }
   };
 
-  // Décompte dynamique par catégorie de menace
+  // Détection de source réseau / IP
+  const isNetworkLog = (log: RawLog) => {
+    const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(log.hostname) && log.hostname !== "127.0.0.1";
+    return log.source_id.startsWith("network_") || isIp;
+  };
+
+  const filteredLogs = recentLogs.filter((l) => {
+    if (logFilter === "all") return true;
+    if (logFilter === "network") return isNetworkLog(l);
+    if (logFilter === "local") return !isNetworkLog(l);
+    return true;
+  });
+
   const categoryCounts = recentAlerts.reduce((acc, a) => {
     acc[a.category] = (acc[a.category] || 0) + 1;
     return acc;
@@ -90,12 +141,36 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Bandeau d'alerte Privilèges Administrateur (UAC) */}
+      {isAdmin === false && (
+        <div className="card bg-amber-950/40 border-amber-500/50 p-4 flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+              <ShieldIcon size={22} />
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-amber-200">Mode Standard Détecté (Privilèges restreints)</h4>
+              <p className="text-xs text-amber-300/80 mt-0.5">
+                Pour surveiller les journaux sensibles Windows EventLog (Security, Sysmon) ou modifier les règles réseau, l'accès Administrateur est requis.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleRelaunchAdmin}
+            className="btn bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs flex items-center gap-1.5 px-3.5 py-2 shadow-md transition-transform active:scale-95"
+          >
+            <Zap size={14} className="fill-current" />
+            Relancer en tant qu'Administrateur (UAC)
+          </button>
+        </div>
+      )}
+
       {/* Dynamic Header & Admin Control */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">Dashboard Sécurité & DLP</h2>
           <p className="text-sm text-surface-400 mt-1 flex items-center gap-2">
-            <span>Surveillance multi-axes en temps réel</span>
+            <span>Surveillance multi-axes en temps réel & Tâche de fond</span>
             <span>•</span>
             <span className="text-2xs text-surface-500">Mis à jour à {lastRefreshed.toLocaleTimeString()}</span>
           </p>
@@ -138,7 +213,7 @@ export default function Dashboard() {
               isMonitoring ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
             }`} />
             <span className="text-xs font-medium">
-              {isMonitoring ? "Surveillance active" : "Surveillance en pause"}
+              {isMonitoring ? "Surveillance active (Systray)" : "Surveillance en pause"}
             </span>
           </div>
         </div>
@@ -279,35 +354,66 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Live Raw Logs Ingestion */}
+        {/* Live Raw Logs Ingestion with Filter */}
         <div className="card space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-sm flex items-center gap-2">
               <Terminal size={16} className="text-primary-400" />
               Flux des Logs Ingestés en Direct
             </h3>
-            <span className="text-xs text-surface-500">{recentLogs.length} récents</span>
+            
+            {/* Filter buttons */}
+            <div className="flex items-center gap-1 bg-surface-900 p-0.5 rounded-lg border border-surface-800 text-2xs">
+              <button
+                onClick={() => setLogFilter("all")}
+                className={`px-2 py-1 rounded transition-colors ${logFilter === "all" ? "bg-surface-700 text-white font-medium" : "text-surface-400 hover:text-surface-200"}`}
+              >
+                Tous ({recentLogs.length})
+              </button>
+              <button
+                onClick={() => setLogFilter("local")}
+                className={`px-2 py-1 rounded transition-colors ${logFilter === "local" ? "bg-purple-900/60 text-purple-200 font-medium" : "text-surface-400 hover:text-surface-200"}`}
+              >
+                💻 Locaux
+              </button>
+              <button
+                onClick={() => setLogFilter("network")}
+                className={`px-2 py-1 rounded transition-colors ${logFilter === "network" ? "bg-cyan-900/60 text-cyan-200 font-medium" : "text-surface-400 hover:text-surface-200"}`}
+              >
+                🌐 Réseau (IP)
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2 font-mono text-2xs">
-            {recentLogs.length === 0 ? (
+            {filteredLogs.length === 0 ? (
               <div className="text-center py-8 text-surface-500 text-xs font-sans">
-                En attente d'ingestion de logs...
+                {recentLogs.length === 0 ? "En attente d'ingestion de logs..." : "Aucun log correspondant au filtre."}
               </div>
             ) : (
-              recentLogs.map((l) => (
-                <div key={l.id} className="p-2.5 rounded bg-surface-900/80 border border-surface-800/80 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-surface-500 text-3xs font-semibold px-1.5 py-0.5 rounded bg-surface-800">
-                      {l.hostname}
+              filteredLogs.map((l) => {
+                const isNet = isNetworkLog(l);
+                return (
+                  <div key={l.id} className="p-2.5 rounded bg-surface-900/80 border border-surface-800/80 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      {isNet ? (
+                        <span className="text-3xs font-semibold px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 flex items-center gap-1 shrink-0">
+                          <Globe size={10} />
+                          {l.hostname}
+                        </span>
+                      ) : (
+                        <span className="text-3xs font-semibold px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 flex items-center gap-1 shrink-0">
+                          💻 {l.hostname}
+                        </span>
+                      )}
+                      <span className="text-surface-300 truncate">{l.raw_message}</span>
+                    </div>
+                    <span className="text-surface-500 whitespace-nowrap">
+                      {new Date(l.timestamp).toLocaleTimeString()}
                     </span>
-                    <span className="text-surface-300 truncate">{l.raw_message}</span>
                   </div>
-                  <span className="text-surface-500 whitespace-nowrap">
-                    {new Date(l.timestamp).toLocaleTimeString()}
-                  </span>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

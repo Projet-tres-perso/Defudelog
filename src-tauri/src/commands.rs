@@ -488,3 +488,82 @@ pub fn get_templates(state: State<'_, AppState>, page: Option<usize>, per_page: 
         "total_pages": (total as f64 / per_page as f64).ceil() as u64,
     }))
 }
+
+#[tauri::command]
+pub fn check_is_admin() -> Result<bool, String> {
+    let current_os = std::env::consts::OS;
+    if current_os == "windows" {
+        // Test non destructif via net session pour vérifier l'élévation UAC sous Windows
+        let output = std::process::Command::new("net")
+            .arg("session")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output();
+        match output {
+            Ok(out) => Ok(out.status.success()),
+            Err(_) => Ok(false),
+        }
+    } else {
+        // Unix (macOS / Linux) : UID == 0 pour root
+        #[cfg(unix)]
+        {
+            let uid = unsafe { libc::geteuid() };
+            Ok(uid == 0)
+        }
+        #[cfg(not(unix))]
+        {
+            Ok(false)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<(), String> {
+    let current_exe = std::env::current_exe()
+        .map_err(|e| format!("Impossible d'obtenir le chemin de l'exécutable: {}", e))?;
+    let exe_path = current_exe.to_string_lossy().to_string();
+
+    let current_os = std::env::consts::OS;
+    if current_os == "windows" {
+        let ps_cmd = format!(
+            "Start-Process -FilePath '{}' -Verb RunAs",
+            exe_path.replace('\'', "''")
+        );
+        let _ = std::process::Command::new("powershell")
+            .arg("-NoProfile")
+            .arg("-NonInteractive")
+            .arg("-Command")
+            .arg(&ps_cmd)
+            .spawn()
+            .map_err(|e| format!("Erreur lors de la demande d'élévation UAC: {}", e))?;
+        
+        // Quitter l'instance non élevée
+        app.exit(0);
+        Ok(())
+    } else if current_os == "macos" || current_os == "darwin" {
+        let osa_cmd = format!(
+            "do shell script \"open '{}'\" with administrator privileges",
+            exe_path
+        );
+        let _ = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&osa_cmd)
+            .spawn()
+            .map_err(|e| format!("Erreur élévation macOS: {}", e))?;
+        app.exit(0);
+        Ok(())
+    } else {
+        // Linux : pkexec
+        let _ = std::process::Command::new("pkexec")
+            .arg(&exe_path)
+            .spawn()
+            .map_err(|e| format!("Erreur pkexec: {}", e))?;
+        app.exit(0);
+        Ok(())
+    }
+}
+
+#[tauri::command]
+pub fn purge_demo_sources(state: State<'_, AppState>) -> Result<(), String> {
+    state.db.purge_demo_sources().map_err(|e| e.to_string())
+}

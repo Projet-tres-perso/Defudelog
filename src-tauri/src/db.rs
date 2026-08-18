@@ -159,6 +159,18 @@ impl Database {
         let _ = conn.execute("ALTER TABLE alerts ADD COLUMN llm_explanation TEXT", []);
         let _ = conn.execute("ALTER TABLE alerts ADD COLUMN mitigation_suggestion TEXT", []);
 
+        // Purge automatique de toute fausse source ou donnée démo résiduelle
+        let _ = conn.execute("DELETE FROM log_sources WHERE id LIKE 'demo_%' OR os = 'demo'", []);
+        let _ = conn.execute("DELETE FROM raw_logs WHERE source_id LIKE 'demo_%'", []);
+
+        Ok(())
+    }
+
+    /// Purge manuelle explicite des données de démonstration
+    pub fn purge_demo_sources(&self) -> Result<(), AppError> {
+        let conn = self.conn.lock();
+        conn.execute("DELETE FROM log_sources WHERE id LIKE 'demo_%' OR os = 'demo'", [])?;
+        conn.execute("DELETE FROM raw_logs WHERE source_id LIKE 'demo_%'", [])?;
         Ok(())
     }
 

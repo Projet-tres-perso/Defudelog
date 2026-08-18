@@ -14,6 +14,8 @@ use uuid::Uuid;
 /// Collecteur de logs unifié — multi-source, multi-OS
 pub struct LogCollector {
     db: std::sync::Arc<Database>,
+    engine: Option<std::sync::Arc<parking_lot::Mutex<crate::engine::DetectionPipeline>>>,
+    app_handle: Option<tauri::AppHandle>,
     active_watchers: Vec<FileWatcherHandle>,
     running: bool,
 }
@@ -24,9 +26,15 @@ struct FileWatcherHandle {
 }
 
 impl LogCollector {
-    pub fn new(db: std::sync::Arc<Database>) -> Self {
+    pub fn new(
+        db: std::sync::Arc<Database>,
+        engine: Option<std::sync::Arc<parking_lot::Mutex<crate::engine::DetectionPipeline>>>,
+        app_handle: Option<tauri::AppHandle>,
+    ) -> Self {
         Self {
             db,
+            engine,
+            app_handle,
             active_watchers: Vec::new(),
             running: false,
         }
@@ -54,7 +62,6 @@ impl LogCollector {
                     self.start_windows_collection(&source, &channel, query.as_deref())?;
                 }
                 SourceType::Kafka { .. } => {
-                    // Kafka est géré séparément via le module kafka
                     log::info!("Kafka source {}: handled by kafka module", source.id);
                 }
                 SourceType::NetworkSyslog { .. } => {
@@ -76,9 +83,10 @@ impl LogCollector {
     fn watch_file(&self, source: &LogSource, path: &str) -> Result<FileWatcherHandle, AppError> {
         let source_id = source.id.clone();
         let db = self.db.clone();
+        let engine = self.engine.clone();
+        let app_handle = self.app_handle.clone();
         let file_path = std::path::PathBuf::from(path);
 
-        // Vérifier que le fichier existe
         if !file_path.exists() {
             return Err(AppError::Collection(format!(
                 "Fichier introuvable: {}",
@@ -111,12 +119,10 @@ impl LogCollector {
 
             let mut last_pos = 0;
 
-            // Fonction pour lire les nouvelles lignes depuis last_pos
             let read_new_lines = |pos: &mut u64| {
                 match File::open(&file_path) {
                     Ok(mut file) => {
                         if let Ok(metadata) = file.metadata() {
-                            // Gérer la rotation de fichier (truncate)
                             if metadata.len() < *pos {
                                 *pos = 0;
                             }
@@ -125,9 +131,16 @@ impl LogCollector {
                                 let reader = BufReader::new(file);
                                 for line in reader.lines() {
                                     if let Ok(line) = line {
-                                        let line_len = line.len() as u64 + 1; // +1 pour le \n
+                                        let line_len = line.len() as u64 + 1;
                                         if !line.trim().is_empty() {
-                                            let _ = Self::ingest_line(&db, &source_id_thread, &hostname, &line);
+                                            let _ = Self::ingest_line(
+                                                &db,
+                                                engine.as_ref(),
+                                                app_handle.as_ref(),
+                                                &source_id_thread,
+                                                &hostname,
+                                                &line,
+                                            );
                                         }
                                         *pos += line_len;
                                     }
@@ -136,9 +149,9 @@ impl LogCollector {
                         }
                     },
                     Err(e) => {
-                        let err_msg = format!("[DEFUDOLOG PERMISSION ERROR] Impossible de lire le fichier source '{}' : {}. Vérifiez les droits d'accès ou l'Accès complet au disque.", file_path.display(), e);
+                        let err_msg = format!("[DEFUDOLOG PERMISSION ERROR] Impossible de lire le fichier '{}' : {}", file_path.display(), e);
                         log::error!("{}", err_msg);
-                        let _ = Self::ingest_line(&db, &source_id_thread, &hostname, &err_msg);
+                        let _ = Self::ingest_line(&db, engine.as_ref(), app_handle.as_ref(), &source_id_thread, &hostname, &err_msg);
                     }
                 }
             };
@@ -169,6 +182,8 @@ impl LogCollector {
         let source_id = source.id.clone();
         let hostname = source.hostname.clone();
         let db = self.db.clone();
+        let engine = self.engine.clone();
+        let app_handle = self.app_handle.clone();
         let pred = predicate.unwrap_or("").to_string();
 
         thread::spawn(move || {
@@ -187,8 +202,16 @@ impl LogCollector {
                         let reader = BufReader::new(stdout);
                         for line in reader.lines() {
                             if let Ok(log_line) = line {
-                                let _ =
-                                    Self::ingest_line(&db, &source_id, &hostname, &log_line);
+                                if !log_line.trim().is_empty() {
+                                    let _ = Self::ingest_line(
+                                        &db,
+                                        engine.as_ref(),
+                                        app_handle.as_ref(),
+                                        &source_id,
+                                        &hostname,
+                                        &log_line,
+                                    );
+                                }
                             }
                         }
                     }
@@ -207,6 +230,8 @@ impl LogCollector {
         let source_id = source.id.clone();
         let hostname = source.hostname.clone();
         let db = self.db.clone();
+        let engine = self.engine.clone();
+        let app_handle = self.app_handle.clone();
 
         thread::spawn(move || {
             let mut cmd = std::process::Command::new("journalctl");
@@ -221,8 +246,16 @@ impl LogCollector {
                         let reader = BufReader::new(stdout);
                         for line in reader.lines() {
                             if let Ok(log_line) = line {
-                                let _ =
-                                    Self::ingest_line(&db, &source_id, &hostname, &log_line);
+                                if !log_line.trim().is_empty() {
+                                    let _ = Self::ingest_line(
+                                        &db,
+                                        engine.as_ref(),
+                                        app_handle.as_ref(),
+                                        &source_id,
+                                        &hostname,
+                                        &log_line,
+                                    );
+                                }
                             }
                         }
                     }
@@ -236,30 +269,61 @@ impl LogCollector {
         Ok(())
     }
 
-    /// Collection sur Windows via wevtutil
+    /// Collection sur Windows via wevtutil et PowerShell en streaming continu
     fn start_windows_collection(
         &self,
         source: &LogSource,
         channel: &str,
-        query: Option<&str>,
+        _query: Option<&str>,
     ) -> AppResult<()> {
         let source_id = source.id.clone();
         let hostname = source.hostname.clone();
         let db = self.db.clone();
+        let engine = self.engine.clone();
+        let app_handle = self.app_handle.clone();
         let channel = channel.to_string();
-        let _query_str = query.unwrap_or("*").to_string();
 
         thread::spawn(move || {
-            // PowerShell one-liner pour suivre les événements Windows
-            let ps_cmd = format!(
-                r#"Get-WinEvent -FilterHashtable @{{LogName='{}'}} -MaxEvents 1 2>$null; while($true) {{ Get-WinEvent -FilterHashtable @{{LogName='{}'}} -MaxEvents 100 | ForEach-Object {{ $_.TimeCreated.ToString('o') + ' [' + $_.LevelDisplayName + '] ' + $_.Id + ': ' + $_.Message }} | Select-Object -Last 1; Start-Sleep -Seconds 2 }}"#,
-                channel, channel
+            // Lecture initiale des 25 derniers événements existants pour éviter le cold-start vide
+            let init_script = format!(
+                r#"Get-WinEvent -LogName '{}' -MaxEvents 25 2>$null | Sort-Object TimeCreated | ForEach-Object {{ $_.TimeCreated.ToString('yyyy-MM-ddTHH:mm:ssZ') + ' [' + $_.LevelDisplayName + '] EventID=' + $_.Id + ' Provider=' + $_.ProviderName + ' ' + ($_.Message -replace '[\r\n]+', ' ') }}"#,
+                channel
+            );
+
+            let mut init_cmd = std::process::Command::new("powershell");
+            init_cmd.arg("-NoProfile")
+                .arg("-NonInteractive")
+                .arg("-Command")
+                .arg(&init_script);
+
+            if let Ok(output) = init_cmd.output() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                for line in text.lines() {
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() {
+                        let _ = Self::ingest_line(
+                            &db,
+                            engine.as_ref(),
+                            app_handle.as_ref(),
+                            &source_id,
+                            &hostname,
+                            trimmed,
+                        );
+                    }
+                }
+            }
+
+            // Suivi en continu des nouveaux événements avec mémorisation du dernier RecordID
+            let loop_script = format!(
+                r#"$lastTime = (Get-Date).AddSeconds(-5); while($true) {{ $events = Get-WinEvent -FilterHashtable @{{LogName='{}'; StartTime=$lastTime}} -ErrorAction SilentlyContinue | Sort-Object TimeCreated; if ($events) {{ foreach ($e in $events) {{ $msg = $e.TimeCreated.ToString('yyyy-MM-ddTHH:mm:ssZ') + ' [' + $e.LevelDisplayName + '] EventID=' + $e.Id + ' Provider=' + $e.ProviderName + ' ' + ($e.Message -replace '[\r\n]+', ' '); [Console]::WriteLine($msg); }}; $lastTime = (Get-Date); }}; Start-Sleep -Milliseconds 1500; }}"#,
+                channel
             );
 
             let mut cmd = std::process::Command::new("powershell");
             cmd.arg("-NoProfile")
+                .arg("-NonInteractive")
                 .arg("-Command")
-                .arg(&ps_cmd)
+                .arg(&loop_script)
                 .stdout(std::process::Stdio::piped());
 
             match cmd.spawn() {
@@ -269,12 +333,15 @@ impl LogCollector {
                         let reader = BufReader::new(stdout);
                         for line in reader.lines() {
                             if let Ok(log_line) = line {
-                                if !log_line.trim().is_empty() {
+                                let trimmed = log_line.trim();
+                                if !trimmed.is_empty() {
                                     let _ = Self::ingest_line(
                                         &db,
+                                        engine.as_ref(),
+                                        app_handle.as_ref(),
                                         &source_id,
                                         &hostname,
-                                        &log_line,
+                                        trimmed,
                                     );
                                 }
                             }
@@ -290,9 +357,11 @@ impl LogCollector {
         Ok(())
     }
 
-    /// Ingère une ligne de log dans la base de données
+    /// Ingère une ligne de log, l'analyse via DetectionPipeline et émet un événement vers le frontend
     fn ingest_line(
         db: &Database,
+        engine: Option<&std::sync::Arc<parking_lot::Mutex<crate::engine::DetectionPipeline>>>,
+        app_handle: Option<&tauri::AppHandle>,
         source_id: &str,
         hostname: &str,
         line: &str,
@@ -303,17 +372,32 @@ impl LogCollector {
             format!("{:x}", hasher.finalize())
         };
 
+        let now = Utc::now();
         let raw_log = RawLog {
             id: Uuid::new_v4().to_string(),
             source_id: source_id.to_string(),
             hostname: hostname.to_string(),
             raw_message: line.to_string(),
             log_hash,
-            timestamp: Utc::now(),
-            ingested_at: Utc::now(),
+            timestamp: now,
+            ingested_at: now,
         };
 
+        // 1. Insertion SQLite chiffrée
         db.insert_raw_log(&raw_log)?;
+
+        // 2. Traitement immédiat par le moteur d'IA multi-axes
+        if let Some(engine_lock) = engine {
+            let mut eng = engine_lock.lock();
+            let _ = eng.process_log(source_id, hostname, line, now);
+        }
+
+        // 3. Diffusion temps réel vers le frontend
+        if let Some(app) = app_handle {
+            use tauri::Emitter;
+            let _ = app.emit("log-ingested", &raw_log);
+        }
+
         Ok(raw_log)
     }
 

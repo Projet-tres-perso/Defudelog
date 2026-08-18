@@ -16,6 +16,8 @@ use syslog_listener::SyslogServer;
 use parking_lot::Mutex;
 use std::sync::Arc;
 use tauri::Manager;
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::TrayIconBuilder;
 
 pub struct AppState {
     pub db: Arc<Database>,
@@ -33,7 +35,11 @@ impl AppState {
         let engine = Arc::new(Mutex::new(DetectionPipeline::new(db.clone(), settings.detection.clone(), app_handle.clone())));
         let syslog_server = Arc::new(SyslogServer::new(db.clone(), Some(engine.clone()), 1514));
         
-        let collector = Arc::new(Mutex::new(collector::LogCollector::new(db.clone())));
+        let collector = Arc::new(Mutex::new(collector::LogCollector::new(
+            db.clone(),
+            Some(engine.clone()),
+            Some(app_handle.clone()),
+        )));
         let network_sniffer = Arc::new(network::NetworkSniffer::new(db.clone(), app_handle.clone()));
         network_sniffer.start();
 
@@ -72,10 +78,52 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Maintenir le processus en tâche de fond dans la zone de notification (Systray)
+                let _ = window.hide();
+                api.prevent_close();
+            }
+        })
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let app_state = AppState::new(&db_path, app_handle).expect("Failed to initialize application state");
             app.manage(app_state);
+
+            // Configuration du System Tray (Zone de notification)
+            let show_i = MenuItemBuilder::with_id("show", "Ouvrir DeFuDoLog").build(app)?;
+            let status_i = MenuItemBuilder::with_id("status", "Protection & Surveillance Active").enabled(false).build(app)?;
+            let quit_i = MenuItemBuilder::with_id("quit", "Quitter Définitivement").build(app)?;
+            let menu = MenuBuilder::new(app).items(&[&show_i, &status_i, &quit_i]).build()?;
+
+            let _tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .tooltip("DeFuDoLog — Surveillance et Détection DLP en Tâche de Fond")
+                .on_menu_event(move |app, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -92,6 +140,9 @@ pub fn run() {
             commands::start_monitoring,
             commands::stop_monitoring,
             commands::get_monitoring_status,
+            commands::check_is_admin,
+            commands::relaunch_as_admin,
+            commands::purge_demo_sources,
             commands::get_raw_logs,
             commands::get_alerts,
             commands::acknowledge_alert,

@@ -51,6 +51,8 @@ export default function Sources() {
 
   const fetchSources = async () => {
     try {
+      // Nettoyage préventif des fausses sources démo
+      await invoke("purge_demo_sources");
       const s = await invoke<LogSource[]>("list_log_sources");
       setSources(Array.isArray(s) ? s : []);
     } catch (e) {
@@ -67,6 +69,14 @@ export default function Sources() {
       setSyslogRunning(status?.running ?? false);
     } catch (e) {
       console.error("Erreur get_syslog_status:", e);
+    }
+  };
+
+  const handleRelaunchAdmin = async () => {
+    try {
+      await invoke("relaunch_as_admin");
+    } catch (e) {
+      alert("Erreur lors de la demande d'élévation: " + String(e));
     }
   };
 
@@ -342,13 +352,22 @@ export default function Sources() {
                     <span className="text-2xs text-surface-500">
                       OS: <span className="capitalize">{sug.os}</span> · Hôte: {sug.hostname}
                     </span>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => setSuggestions(prev => prev.filter(s => s.id !== sug.id))}
                         className="btn-ghost text-xs py-1 px-2.5 text-surface-400 hover:text-surface-200"
                       >
                         Ignorer
                       </button>
+                      {(isElevation || isDenied) && (
+                        <button
+                          onClick={handleRelaunchAdmin}
+                          className="text-xs py-1 px-3 rounded font-medium bg-amber-600 hover:bg-amber-500 text-white flex items-center gap-1 shadow-sm transition-colors"
+                        >
+                          <Zap size={12} className="fill-current" />
+                          Élever en Admin (UAC)
+                        </button>
+                      )}
                       <button
                         onClick={() => acceptSuggestion(sug)}
                         className={`text-xs py-1 px-3 rounded font-medium transition-colors ${
