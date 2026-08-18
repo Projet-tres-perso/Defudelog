@@ -30,23 +30,19 @@ impl AppState {
     pub fn new(db_path: &str, app_handle: tauri::AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
         let db = Arc::new(Database::new(db_path)?);
         let settings = models::AppSettings::default();
-        let engine = DetectionPipeline::new(db.clone(), settings.detection.clone(), app_handle.clone());
-        let syslog_server = Arc::new(SyslogServer::new(db.clone(), 1514));
+        let engine = Arc::new(Mutex::new(DetectionPipeline::new(db.clone(), settings.detection.clone(), app_handle.clone())));
+        let syslog_server = Arc::new(SyslogServer::new(db.clone(), Some(engine.clone()), 1514));
         
-        let mut collector = collector::LogCollector::new(db.clone());
-        if let Err(e) = collector.start() {
-            log::error!("Erreur au démarrage du LogCollector: {}", e);
-        }
-
+        let collector = Arc::new(Mutex::new(collector::LogCollector::new(db.clone())));
         let network_sniffer = Arc::new(network::NetworkSniffer::new(db.clone(), app_handle.clone()));
         network_sniffer.start();
 
         Ok(Self {
             db,
-            engine: Arc::new(Mutex::new(engine)),
+            engine,
             settings: Arc::new(Mutex::new(settings)),
             syslog_server,
-            collector: Arc::new(Mutex::new(collector)),
+            collector,
             network_sniffer,
         })
     }
@@ -93,6 +89,9 @@ pub fn run() {
             commands::start_syslog_server,
             commands::stop_syslog_server,
             commands::get_syslog_status,
+            commands::start_monitoring,
+            commands::stop_monitoring,
+            commands::get_monitoring_status,
             commands::get_raw_logs,
             commands::get_alerts,
             commands::acknowledge_alert,

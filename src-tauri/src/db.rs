@@ -541,6 +541,17 @@ impl Database {
         Ok(logs)
     }
 
+    pub fn insert_or_ignore_network_source(&self, id: &str, hostname: &str, ip: &str) -> Result<(), AppError> {
+        let conn = self.conn.lock();
+        let config_json = serde_json::json!({ "ip": ip, "protocol": "udp/tcp", "port": 1514 }).to_string();
+        conn.execute(
+            "INSERT OR IGNORE INTO log_sources (id, name, source_type, hostname, os, enabled, config, created_at, updated_at)
+             VALUES (?1, ?2, 'network_syslog', ?3, 'remote_network', 1, ?4, datetime('now'), datetime('now'))",
+            params![id, format!("Syslog ({})", hostname), hostname, config_json],
+        )?;
+        Ok(())
+    }
+
     pub fn get_network_nodes(&self) -> Result<Vec<NetworkNode>, AppError> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(

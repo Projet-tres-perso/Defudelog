@@ -135,6 +135,30 @@ pub fn stop_syslog_server(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn start_monitoring(state: State<'_, AppState>) -> Result<(), String> {
+    let mut collector = state.collector.lock();
+    collector.start().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn stop_monitoring(state: State<'_, AppState>) -> Result<(), String> {
+    let mut collector = state.collector.lock();
+    collector.stop();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_monitoring_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let collector = state.collector.lock();
+    let sources = state.db.get_enabled_sources().map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "monitoring": collector.is_running(),
+        "sources_count": sources.len(),
+        "syslog_running": state.syslog_server.is_running(),
+    }))
+}
+
+#[tauri::command]
 pub fn get_syslog_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
         "running": state.syslog_server.is_running(),

@@ -8,18 +8,22 @@ use tokio::io::AsyncBufReadExt;
 use uuid::Uuid;
 use crate::db::Database;
 use crate::models::RawLog;
+use parking_lot::Mutex;
+use crate::engine::DetectionPipeline;
 
 /// Serveur Syslog réseau (UDP/TCP)
 pub struct SyslogServer {
     db: Arc<Database>,
+    engine: Option<Arc<Mutex<DetectionPipeline>>>,
     running: Arc<AtomicBool>,
     port: u16,
 }
 
 impl SyslogServer {
-    pub fn new(db: Arc<Database>, port: u16) -> Self {
+    pub fn new(db: Arc<Database>, engine: Option<Arc<Mutex<DetectionPipeline>>>, port: u16) -> Self {
         Self {
             db,
+            engine,
             running: Arc::new(AtomicBool::new(false)),
             port,
         }
@@ -43,6 +47,8 @@ impl SyslogServer {
         let port = self.port;
         let db_udp = self.db.clone();
         let db_tcp = self.db.clone();
+        let engine_udp = self.engine.clone();
+        let engine_tcp = self.engine.clone();
         let running_udp = self.running.clone();
         let running_tcp = self.running.clone();
 
@@ -59,14 +65,14 @@ impl SyslogServer {
                             match res {
                                 Ok((len, peer)) => {
                                     let msg = String::from_utf8_lossy(&buf[..len]).to_string();
-                                    Self::process_syslog_msg(&db_udp, peer, &msg);
+                                    Self::process_syslog_msg(&db_udp, engine_udp.as_ref(), peer, &msg);
                                 }
                                 Err(e) => {
                                     log::error!("Erreur récepteur Syslog UDP: {}", e);
                                 }
                             }
                         }
-                        _ = tokio::time::sleep(tokio::time::Duration::from_millis(500)) => {}
+                        _ = tokio::time::sleep(tokio::time::Duration::from_millis(200)) => {}
                     }
                 }
             } else {
@@ -85,18 +91,19 @@ impl SyslogServer {
                         res = listener.accept() => {
                             if let Ok((stream, peer)) = res {
                                 let db_conn = db_tcp.clone();
+                                let eng_conn = engine_tcp.clone();
                                 tokio::spawn(async move {
                                     let reader = tokio::io::BufReader::new(stream);
                                     let mut lines = reader.lines();
                                     while let Ok(Some(line)) = lines.next_line().await {
                                         if !line.trim().is_empty() {
-                                            Self::process_syslog_msg(&db_conn, peer, &line);
+                                            Self::process_syslog_msg(&db_conn, eng_conn.as_ref(), peer, &line);
                                         }
                                     }
                                 });
                             }
                         }
-                        _ = tokio::time::sleep(tokio::time::Duration::from_millis(500)) => {}
+                        _ = tokio::time::sleep(tokio::time::Duration::from_millis(200)) => {}
                     }
                 }
             } else {
@@ -107,9 +114,20 @@ impl SyslogServer {
         Ok(())
     }
 
-    /// Traite un message Syslog brut et l'insère en BDD
-    fn process_syslog_msg(db: &Database, peer: SocketAddr, raw: &str) {
+    /// Traite un message Syslog brut, enregistre le nœud réseau LAN et l'injecte dans le pipeline
+    fn process_syslog_msg(
+        db: &Database,
+        engine: Option<&Arc<Mutex<DetectionPipeline>>>,
+        peer: SocketAddr,
+        raw: &str,
+    ) {
         let (hostname, message) = Self::parse_syslog_line(peer, raw);
+        let source_id = format!("network_syslog_{}", peer.ip());
+
+        // 1. Découverte automatique du nœud réseau : l'ajouter dans log_sources
+        if let Err(e) = db.insert_or_ignore_network_source(&source_id, &hostname, &peer.ip().to_string()) {
+            log::warn!("Erreur enregistrement source réseau LAN: {}", e);
+        }
 
         let log_hash = {
             let mut hasher = Sha256::new();
@@ -119,9 +137,9 @@ impl SyslogServer {
 
         let raw_log = RawLog {
             id: Uuid::new_v4().to_string(),
-            source_id: format!("network_syslog_{}", peer.ip()),
-            hostname,
-            raw_message: message,
+            source_id: source_id.clone(),
+            hostname: hostname.clone(),
+            raw_message: message.clone(),
             log_hash,
             timestamp: Utc::now(),
             ingested_at: Utc::now(),
@@ -129,6 +147,12 @@ impl SyslogServer {
 
         if let Err(e) = db.insert_raw_log(&raw_log) {
             log::error!("Erreur insertion log Syslog réseau: {}", e);
+        }
+
+        // 2. Traitement immédiat par le moteur d'analyse multi-axes
+        if let Some(engine_lock) = engine {
+            let mut eng = engine_lock.lock();
+            let _ = eng.process_log(&source_id, &hostname, &message, Utc::now());
         }
     }
 
@@ -150,7 +174,6 @@ impl SyslogServer {
         // Format RFC 3164: "Mmm dd hh:mm:ss hostname message"
         let parts: Vec<&str> = content.split_whitespace().collect();
         if parts.len() >= 4 {
-            // Vérifier si parts[0..3] ressemble à une date BSD ("Aug", "2", "12:00:00")
             let hostname = parts[3].to_string();
             let msg = parts[4..].join(" ");
             if !msg.is_empty() {

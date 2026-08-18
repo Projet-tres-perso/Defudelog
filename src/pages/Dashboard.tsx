@@ -4,8 +4,8 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import type { DashboardStats, Alert, RawLog, AlertCategory, TimeSeriesPoint } from "@/types";
 import {
   AlertTriangle, ScrollText, Radio, Activity,
-  ShieldAlert, KeyRound, Cpu, Lock, Zap, Clock,
-  RefreshCw, CheckCircle2, Terminal, ChevronRight,
+  ShieldAlert, KeyRound, Cpu, Lock, Play, Pause,
+  RefreshCw, Terminal, ChevronRight, ShieldCheck,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -13,7 +13,8 @@ export default function Dashboard() {
   const [timeseries, setTimeseries] = useState<TimeSeriesPoint[]>([]);
   const [recentAlerts, setRecentAlerts] = useState<Alert[]>([]);
   const [recentLogs, setRecentLogs] = useState<RawLog[]>([]);
-  const [generating, setGenerating] = useState(false);
+  const [isMonitoring, setIsMonitoring] = useState(false);
+  const [monitoringLoading, setMonitoringLoading] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
   const fetchAllData = async () => {
@@ -34,6 +35,9 @@ export default function Dashboard() {
         setRecentLogs(logsRes as unknown as RawLog[]);
       }
 
+      const monStatus = await invoke<{ monitoring: boolean }>("get_monitoring_status");
+      setIsMonitoring(monStatus?.monitoring ?? false);
+
       setLastRefreshed(new Date());
     } catch (e) {
       console.error("Erreur mise à jour Dashboard:", e);
@@ -46,15 +50,21 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const generateDemoLogs = async () => {
-    setGenerating(true);
+  const toggleMonitoring = async () => {
+    setMonitoringLoading(true);
     try {
-      await invoke("generate_demo_logs");
+      if (isMonitoring) {
+        await invoke("stop_monitoring");
+        setIsMonitoring(false);
+      } else {
+        await invoke("start_monitoring");
+        setIsMonitoring(true);
+      }
       await fetchAllData();
     } catch (e) {
-      console.error(e);
+      console.error("Erreur toggle monitoring:", e);
     } finally {
-      setGenerating(false);
+      setMonitoringLoading(false);
     }
   };
 
@@ -80,12 +90,12 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Dynamic Header */}
+      {/* Dynamic Header & Admin Control */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold">Dashboard Sécurité Multi-Menaces</h2>
+          <h2 className="text-xl font-bold">Dashboard Sécurité & DLP</h2>
           <p className="text-sm text-surface-400 mt-1 flex items-center gap-2">
-            <span>Surveillance et détection d'anomalies en temps réel</span>
+            <span>Surveillance multi-axes en temps réel</span>
             <span>•</span>
             <span className="text-2xs text-surface-500">Mis à jour à {lastRefreshed.toLocaleTimeString()}</span>
           </p>
@@ -94,17 +104,42 @@ export default function Dashboard() {
           <button onClick={fetchAllData} className="btn-ghost p-2 text-surface-400 hover:text-surface-200" title="Rafraîchir">
             <RefreshCw size={16} />
           </button>
+
+          {/* Admin Monitoring Activation Button */}
           <button
-            onClick={generateDemoLogs}
-            disabled={generating}
-            className="btn-primary flex items-center gap-2 text-xs"
+            onClick={toggleMonitoring}
+            disabled={monitoringLoading}
+            className={`btn flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-lg ${
+              isMonitoring
+                ? "bg-amber-600/90 hover:bg-amber-600 text-white shadow-amber-900/20 border border-amber-500/30"
+                : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20 border border-emerald-500/30"
+            }`}
           >
-            <Zap size={14} className="text-amber-300 animate-bounce" />
-            {generating ? "Génération & Analyse..." : "Simuler logs de démonstration"}
+            {isMonitoring ? (
+              <>
+                <Pause size={15} />
+                {monitoringLoading ? "Arrêt..." : "Suspendre la surveillance"}
+              </>
+            ) : (
+              <>
+                <Play size={15} className="fill-current" />
+                {monitoringLoading ? "Démarrage..." : "Autoriser & Démarrer la surveillance (Admin)"}
+              </>
+            )}
           </button>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs text-emerald-400 font-medium">Monitoring actif</span>
+
+          {/* Live Status Indicator */}
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${
+            isMonitoring
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+              : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+          }`}>
+            <div className={`w-2 h-2 rounded-full ${
+              isMonitoring ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
+            }`} />
+            <span className="text-xs font-medium">
+              {isMonitoring ? "Surveillance active" : "Surveillance en pause"}
+            </span>
           </div>
         </div>
       </div>
@@ -124,135 +159,119 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Timeseries Graph */}
-      <div className="card w-full h-[300px]">
-        <div className="card-header mb-4">Activité globale (24h)</div>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={timeseries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-            <defs>
-              <linearGradient id="colorLogs" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-              </linearGradient>
-              <linearGradient id="colorAlerts" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
-                <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-            <XAxis dataKey="time" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
-            <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
-            <Tooltip 
-              contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px', color: '#e4e4e7' }}
-              itemStyle={{ color: '#e4e4e7' }}
-            />
-            <Area type="monotone" dataKey="logs" name="Logs reçus" stroke="#3b82f6" fillOpacity={1} fill="url(#colorLogs)" />
-            <Area type="monotone" dataKey="alerts" name="Alertes" stroke="#ef4444" fillOpacity={1} fill="url(#colorAlerts)" />
-          </AreaChart>
-        </ResponsiveContainer>
+      {/* Threat Category Cards */}
+      <div className="grid grid-cols-4 gap-4">
+        {threatCategories.map(({ key, label, icon: Icon, color, bg, border }) => {
+          const count = categoryCounts[key] || 0;
+          return (
+            <div key={key} className={`card flex items-center justify-between border ${border} ${bg}`}>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-surface-900/60">
+                  <Icon size={18} className={color} />
+                </div>
+                <div>
+                  <p className="text-xs text-surface-400 font-medium">{label}</p>
+                  <p className="text-lg font-bold tabular-nums mt-0.5">{count}</p>
+                </div>
+              </div>
+              {count > 0 ? (
+                <span className="badge bg-red-500/20 text-red-400 text-2xs animate-pulse">Détecté</span>
+              ) : (
+                <span className="badge bg-emerald-500/10 text-emerald-400 text-2xs flex items-center gap-1">
+                  <ShieldCheck size={12} />
+                  Sain
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Threat categories & Alert breakdown */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* Threat Categories Coverage */}
-        <div className="card col-span-2">
-          <div className="card-header flex items-center justify-between">
-            <span>Périmètre de détection des menaces</span>
-            <span className="text-xs font-normal text-surface-400">Classifieur dynamique actif</span>
-          </div>
-          <div className="grid grid-cols-2 gap-3 mt-2">
-            {threatCategories.map(({ key, label, icon: Icon, color, bg, border }) => {
-              const count = categoryCounts[key] || 0;
-              return (
-                <div key={label} className={`p-3 rounded-xl border ${border} bg-surface-800/40 flex items-center justify-between`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${bg}`}>
-                      <Icon size={18} className={color} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">{label}</p>
-                      <p className="text-2xs text-emerald-400 font-medium flex items-center gap-1 mt-0.5">
-                        <CheckCircle2 size={10} />
-                        Moteur IA & Règles actifs
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-lg font-bold tabular-nums text-surface-100">{count}</span>
-                    <p className="text-3xs text-surface-400 uppercase">Alertes</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {/* Timeseries Graph */}
+      <div className="card space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-sm text-surface-200">Activité des logs & Détection d'anomalies (24h)</h3>
+          <span className="text-2xs text-surface-500 font-mono">Résolution: 1 heure</span>
         </div>
-
-        {/* Alert severity */}
-        <div className="card">
-          <div className="card-header">Sévérité des alertes</div>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-red-500" />
-              <span className="text-sm flex-1">Critiques</span>
-              <span className="text-sm font-semibold tabular-nums">{stats?.high_alerts ?? 0}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-amber-500" />
-              <span className="text-sm flex-1">Modérées</span>
-              <span className="text-sm font-semibold tabular-nums">{stats?.moderate_alerts ?? 0}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-surface-500" />
-              <span className="text-sm flex-1">Total alertes</span>
-              <span className="text-sm font-semibold tabular-nums">{stats?.total_alerts ?? 0}</span>
-            </div>
-          </div>
-          {stats && stats.total_alerts > 0 && (
-            <div className="mt-4 pt-4 border-t border-surface-700">
-              <div className="flex h-2 rounded-full overflow-hidden bg-surface-800">
-                <div
-                  className="bg-red-500 transition-all"
-                  style={{ width: `${(stats.high_alerts / stats.total_alerts) * 100}%` }}
+        <div className="h-64 w-full">
+          {timeseries.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={timeseries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="logGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0}/>
+                  </linearGradient>
+                  <linearGradient id="alertGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.6}/>
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
+                <XAxis dataKey="timestamp" stroke="#64748b" fontSize={11} tickLine={false} />
+                <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155", borderRadius: "0.5rem", fontSize: "12px" }}
+                  itemStyle={{ color: "#e2e8f0" }}
                 />
-                <div
-                  className="bg-amber-500 transition-all"
-                  style={{ width: `${(stats.moderate_alerts / stats.total_alerts) * 100}%` }}
-                />
-              </div>
+                <Area type="monotone" dataKey="log_count" name="Logs reçus" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#logGradient)" />
+                <Area type="monotone" dataKey="alert_count" name="Alertes" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#alertGradient)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center text-surface-500 text-xs">
+              En attente de données chronologiques...
             </div>
           )}
         </div>
       </div>
 
-      {/* Real-Time Live Feeds Section */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* Real-Time Alert Feed */}
-        <div className="card">
-          <div className="card-header flex items-center justify-between">
-            <span className="flex items-center gap-2">
+      {/* Two columns : Recent Alerts & Recent Ingested Logs */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Alerts */}
+        <div className="card space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
               <AlertTriangle size={16} className="text-amber-400" />
-              Flux d'alertes en temps réel
-            </span>
-            <span className="badge bg-amber-500/10 text-amber-400 text-2xs">Temps réel</span>
+              Derniers Incidents & Alertes
+            </h3>
+            <span className="text-xs text-surface-500">{recentAlerts.length} alertes</span>
           </div>
-          <div className="space-y-2 mt-2">
+
+          <div className="space-y-2">
             {recentAlerts.length === 0 ? (
-              <p className="text-sm text-surface-500 py-6 text-center">Aucune alerte récente</p>
+              <div className="text-center py-8 text-surface-500 text-xs">
+                <ShieldCheck size={28} className="mx-auto mb-2 text-emerald-500/60" />
+                Aucune alerte de sécurité active. Le système est protégé.
+              </div>
             ) : (
-              recentAlerts.map((alert) => (
-                <div key={alert.id} className="p-2.5 rounded-lg bg-surface-800/60 border border-surface-700/50 flex items-center justify-between">
-                  <div className="flex items-center gap-3 overflow-hidden">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${alert.level === 'high' ? 'bg-red-500' : 'bg-amber-500'}`} />
-                    <div className="truncate">
-                      <p className="text-xs font-semibold truncate text-surface-200">{alert.template || alert.reasons[0]}</p>
-                      <p className="text-3xs text-surface-400 truncate">
-                        {alert.category.toUpperCase()} • Score: {(alert.final_score * 100).toFixed(0)}%
-                      </p>
+              recentAlerts.map((a) => (
+                <div key={a.id} className="p-3 rounded-lg bg-surface-900 border border-surface-800 flex items-start justify-between gap-3">
+                  <div className="space-y-1 flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`badge text-2xs uppercase ${
+                        a.level === "high" ? "bg-red-500/20 text-red-400" :
+                        a.level === "moderate" ? "bg-amber-500/20 text-amber-400" :
+                        "bg-blue-500/20 text-blue-400"
+                      }`}>
+                        {a.level}
+                      </span>
+                      <span className="text-xs font-semibold text-surface-200 capitalize">
+                        {a.category.replace("_", " ")}
+                      </span>
+                      <span className="text-2xs text-surface-500">
+                        Score: {(a.final_score * 100).toFixed(0)}%
+                      </span>
                     </div>
+                    <p className="text-xs font-mono text-surface-300 truncate">{a.template}</p>
+                    {a.llm_explanation && (
+                      <p className="text-2xs text-primary-300 bg-primary-950/40 border border-primary-900/50 rounded px-2 py-1 mt-1">
+                        💡 SOC IA: {a.llm_explanation}
+                      </p>
+                    )}
                   </div>
-                  <span className="text-3xs text-surface-400 flex items-center gap-1 flex-shrink-0">
-                    <Clock size={10} />
-                    {new Date(alert.detected_at).toLocaleTimeString()}
+                  <span className="text-2xs text-surface-500 whitespace-nowrap">
+                    {new Date(a.detected_at).toLocaleTimeString()}
                   </span>
                 </div>
               ))
@@ -260,27 +279,32 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Real-Time Log Stream */}
-        <div className="card">
-          <div className="card-header flex items-center justify-between">
-            <span className="flex items-center gap-2">
+        {/* Live Raw Logs Ingestion */}
+        <div className="card space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
               <Terminal size={16} className="text-primary-400" />
-              Flux de logs récents
-            </span>
-            <span className="badge bg-primary-500/10 text-primary-400 text-2xs">Live Stream</span>
+              Flux des Logs Ingestés en Direct
+            </h3>
+            <span className="text-xs text-surface-500">{recentLogs.length} récents</span>
           </div>
-          <div className="space-y-2 mt-2">
+
+          <div className="space-y-2 font-mono text-2xs">
             {recentLogs.length === 0 ? (
-              <p className="text-sm text-surface-500 py-6 text-center">Aucun log récent</p>
+              <div className="text-center py-8 text-surface-500 text-xs font-sans">
+                En attente d'ingestion de logs...
+              </div>
             ) : (
-              recentLogs.map((log) => (
-                <div key={log.id} className="p-2.5 rounded-lg bg-surface-800/60 border border-surface-700/50 flex items-center justify-between font-mono text-xs">
-                  <div className="truncate flex items-center gap-2">
-                    <span className="text-3xs px-1.5 py-0.5 rounded bg-surface-700 text-primary-300 font-semibold">{log.hostname}</span>
-                    <span className="truncate text-surface-300">{log.raw_message}</span>
+              recentLogs.map((l) => (
+                <div key={l.id} className="p-2.5 rounded bg-surface-900/80 border border-surface-800/80 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-surface-500 text-3xs font-semibold px-1.5 py-0.5 rounded bg-surface-800">
+                      {l.hostname}
+                    </span>
+                    <span className="text-surface-300 truncate">{l.raw_message}</span>
                   </div>
-                  <span className="text-3xs text-surface-500 flex-shrink-0 ml-2">
-                    {new Date(log.timestamp).toLocaleTimeString()}
+                  <span className="text-surface-500 whitespace-nowrap">
+                    {new Date(l.timestamp).toLocaleTimeString()}
                   </span>
                 </div>
               ))
