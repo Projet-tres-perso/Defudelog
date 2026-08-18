@@ -34,7 +34,6 @@ parking_lot = "0.12"
 libc = "0.2"
 dirs = "6.0"
 reqwest = { version = "0.12", features = ["json"] }
-pnet = "0.34.0"
 fastembed = "5"
 hdbscan = "0.12.0"
 

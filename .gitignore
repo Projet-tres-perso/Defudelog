@@ -49,9 +49,7 @@ src-tauri/target/
 # Optional: if using Vite/React, avoid committing vite cache
 node_modules/.vite
 
-Analyse_perspective.md
-ARCHITECTURE.md
-Manuel.md
+# Documentation files tracked in repository
 
 # Ignorer les modèles téléchargés (ONNX, fastembed)
 src-tauri/.fastembed_cache/

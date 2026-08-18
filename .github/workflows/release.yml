@@ -41,13 +41,6 @@ jobs:
       - name: install frontend dependencies
         run: npm install
 
-      - name: Install Npcap SDK (Windows only)
-        if: matrix.platform == 'windows-latest'
-        run: |
-          Invoke-WebRequest -Uri "https://npcap.com/dist/npcap-sdk-1.13.zip" -OutFile "npcap-sdk.zip"
-          Expand-Archive -Path "npcap-sdk.zip" -DestinationPath "C:\npcap-sdk"
-          echo "LIB=$env:LIB;C:\npcap-sdk\Lib\x64" >> $env:GITHUB_ENV
-
       - name: Install OpenSSL (Windows only)
         if: matrix.platform == 'windows-latest'
         run: |
