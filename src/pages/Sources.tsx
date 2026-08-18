@@ -114,7 +114,8 @@ export default function Sources() {
       setSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
       await fetchSources();
     } catch (e) {
-      console.error(e);
+      console.error("Erreur acceptSuggestion:", e);
+      alert("Erreur lors de l'ajout de la source: " + String(e));
     }
   };
 
@@ -149,23 +150,40 @@ export default function Sources() {
     }
   };
 
-  const submitAddSource = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName) return;
+  const submitAddSource = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newName.trim()) {
+      alert("Veuillez saisir un nom pour la source.");
+      return;
+    }
     
     try {
       let config: any = {};
       if (newType === "file_watcher") {
-        config = { path: newPath, pattern: newPattern };
+        if (!newPath.trim()) {
+          alert("Veuillez renseigner le chemin du fichier de log.");
+          return;
+        }
+        config = { path: newPath.trim(), pattern: newPattern.trim() || "*" };
       } else if (newType === "windows_event_log") {
-        config = { channel: newChannel };
+        config = { channel: newChannel.trim() || "Security" };
+      } else if (newType === "macos_unified_log") {
+        config = { predicate: null };
+      } else if (newType === "journald") {
+        config = { unit_filter: null };
       }
 
+      const detectedOs = navigator.userAgent.includes("Win")
+        ? "windows"
+        : navigator.userAgent.includes("Mac")
+        ? "macos"
+        : "linux";
+
       await invoke("add_log_source", {
-        name: newName,
+        name: newName.trim(),
         sourceType: newType,
         hostname: "localhost",
-        os: newOs === "auto" ? "linux" : newOs,
+        os: newOs === "auto" ? detectedOs : newOs,
         config,
       });
 
@@ -175,16 +193,16 @@ export default function Sources() {
       setTestResult(null);
       await fetchSources();
     } catch (e) {
-      console.error(e);
+      console.error("Erreur add_log_source:", e);
+      alert("Erreur lors de l'enregistrement de la source: " + String(e));
     }
   };
 
   const testConnection = async () => {
     if (newType !== "file_watcher" || !newPath) return;
     try {
-      // Dans un vrai cas, un invoke Rust testerait l'accès au fichier (ex: check_file_access).
-      // Ici, on simule une réponse de test pour l'UX.
-      setTestResult({ ok: true, msg: "Fichier accessible et lisible." });
+      const res = await invoke<{ accessible: boolean; message: string }>("check_source_permission", { path: newPath });
+      setTestResult({ ok: res.accessible, msg: res.message });
     } catch (e) {
       setTestResult({ ok: false, msg: String(e) });
     }
@@ -591,12 +609,28 @@ export default function Sources() {
 
                   {newType === "windows_event_log" && (
                     <label className="block">
-                      <span className="text-sm font-medium text-surface-300">Canal Windows</span>
+                      <span className="text-sm font-medium text-surface-300">Canal Windows Event Log *</span>
+                      <select
+                        className="input mt-1.5 w-full bg-surface-800"
+                        value={["Security", "System", "Application", "Microsoft-Windows-PowerShell/Operational", "Microsoft-Windows-Sysmon/Operational"].includes(newChannel) ? newChannel : "custom"}
+                        onChange={(e) => {
+                          if (e.target.value !== "custom") {
+                            setNewChannel(e.target.value);
+                          }
+                        }}
+                      >
+                        <option value="Security">Security (Authentification & Privilèges - Admin)</option>
+                        <option value="System">System (Système & Services Windows)</option>
+                        <option value="Application">Application (Applications tierces)</option>
+                        <option value="Microsoft-Windows-PowerShell/Operational">PowerShell Operational (Exécution de scripts)</option>
+                        <option value="Microsoft-Windows-Sysmon/Operational">Sysmon Operational (Télémétrie EDR)</option>
+                        <option value="custom">Canal personnalisé...</option>
+                      </select>
                       <input 
                         type="text" 
                         required
-                        placeholder="Security" 
-                        className="input mt-1.5 w-full bg-surface-800"
+                        placeholder="Ex: Security" 
+                        className="input mt-2 w-full bg-surface-800 font-mono text-xs"
                         value={newChannel}
                         onChange={e => setNewChannel(e.target.value)}
                       />

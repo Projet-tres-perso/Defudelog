@@ -8,20 +8,24 @@ type AppState = crate::AppState;
 // ─── Helpers ─────────────────────────────────────────
 
 fn parse_source_type(t: &str, config: &serde_json::Value) -> SourceType {
-    match t {
-        "file_watcher" => SourceType::FileWatcher {
-            path: config["path"].as_str().unwrap_or("/var/log").into(),
-            pattern: config["pattern"].as_str().unwrap_or("*.log").into(),
+    match t.to_lowercase().replace('_', "").as_str() {
+        "filewatcher" => SourceType::FileWatcher {
+            path: config["path"].as_str().unwrap_or("").into(),
+            pattern: config["pattern"].as_str().unwrap_or("*").into(),
         },
         "journald" => SourceType::Journald {
             unit_filter: config["unit_filter"].as_str().map(|s| s.into()),
         },
-        "macos_unified_log" => SourceType::MacOsUnifiedLog {
+        "macosunifiedlog" => SourceType::MacOsUnifiedLog {
             predicate: config["predicate"].as_str().map(|s| s.into()),
         },
-        "windows_event_log" => SourceType::WindowsEventLog {
+        "windowseventlog" => SourceType::WindowsEventLog {
             channel: config["channel"].as_str().unwrap_or("Security").into(),
             query: config["query"].as_str().map(|s| s.into()),
+        },
+        "networksyslog" => SourceType::NetworkSyslog {
+            port: config["port"].as_u64().unwrap_or(1514) as u16,
+            protocol: config["protocol"].as_str().unwrap_or("udp/tcp").into(),
         },
         "kafka" => SourceType::Kafka {
             topic: config["topic"].as_str().unwrap_or("logs").into(),
@@ -29,7 +33,10 @@ fn parse_source_type(t: &str, config: &serde_json::Value) -> SourceType {
                 .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
                 .unwrap_or_default(),
         },
-        _ => SourceType::FileWatcher { path: "/var/log".into(), pattern: "*.log".into() },
+        _ => SourceType::FileWatcher {
+            path: config["path"].as_str().unwrap_or("").into(),
+            pattern: config["pattern"].as_str().unwrap_or("*").into(),
+        },
     }
 }
 
@@ -48,13 +55,27 @@ fn to_severity(s: &str) -> AlertLevel {
 pub fn add_log_source(state: State<'_, AppState>, name: String, source_type: String,
     hostname: String, os: String, config: serde_json::Value) -> Result<LogSource, String>
 {
+    let resolved_source_type = parse_source_type(&source_type, &config);
     let source = LogSource {
-        id: uuid::Uuid::new_v4().to_string(), name,
-        source_type: parse_source_type(&source_type, &config),
-        hostname, os, enabled: true, config,
-        created_at: Utc::now(), updated_at: Utc::now(),
+        id: uuid::Uuid::new_v4().to_string(),
+        name,
+        source_type: resolved_source_type,
+        hostname,
+        os,
+        enabled: true,
+        config,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
     };
     state.db.insert_log_source(&source).map_err(|e| e.to_string())?;
+
+    // Recharger à chaud le collecteur si la surveillance est active
+    let mut collector = state.collector.lock();
+    if collector.is_running() {
+        collector.stop();
+        let _ = collector.start();
+    }
+
     Ok(source)
 }
 
@@ -65,12 +86,28 @@ pub fn list_log_sources(state: State<'_, AppState>) -> Result<Vec<LogSource>, St
 
 #[tauri::command]
 pub fn toggle_log_source(state: State<'_, AppState>, source_id: String, enabled: bool) -> Result<(), String> {
-    state.db.update_source_enabled(&source_id, enabled).map_err(|e| e.to_string())
+    state.db.update_source_enabled(&source_id, enabled).map_err(|e| e.to_string())?;
+    
+    // Recharger à chaud le collecteur si la surveillance est active
+    let mut collector = state.collector.lock();
+    if collector.is_running() {
+        collector.stop();
+        let _ = collector.start();
+    }
+    Ok(())
 }
 
 #[tauri::command]
 pub fn delete_log_source(state: State<'_, AppState>, source_id: String) -> Result<(), String> {
-    state.db.delete_log_source(&source_id).map_err(|e| e.to_string())
+    state.db.delete_log_source(&source_id).map_err(|e| e.to_string())?;
+    
+    // Recharger à chaud le collecteur si la surveillance est active
+    let mut collector = state.collector.lock();
+    if collector.is_running() {
+        collector.stop();
+        let _ = collector.start();
+    }
+    Ok(())
 }
 
 #[tauri::command]

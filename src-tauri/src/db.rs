@@ -237,17 +237,46 @@ impl Database {
         )?;
         let rows = stmt.query_map([], |row| {
             let source_type_str: String = row.get(2)?;
+            let config_val: serde_json::Value = serde_json::from_str(&row.get::<_, String>(6)?).unwrap_or_default();
+            let source_type = match source_type_str.as_str() {
+                "file_watcher" => SourceType::FileWatcher {
+                    path: config_val["path"].as_str().unwrap_or("").to_string(),
+                    pattern: config_val["pattern"].as_str().unwrap_or("*").to_string(),
+                },
+                "windows_event_log" => SourceType::WindowsEventLog {
+                    channel: config_val["channel"].as_str().unwrap_or("Security").to_string(),
+                    query: config_val["query"].as_str().map(|s| s.to_string()),
+                },
+                "macos_unified_log" => SourceType::MacOsUnifiedLog {
+                    predicate: config_val["predicate"].as_str().map(|s| s.to_string()),
+                },
+                "journald" => SourceType::Journald {
+                    unit_filter: config_val["unit_filter"].as_str().map(|s| s.to_string()),
+                },
+                "network_syslog" => SourceType::NetworkSyslog {
+                    port: config_val["port"].as_u64().unwrap_or(1514) as u16,
+                    protocol: config_val["protocol"].as_str().unwrap_or("udp/tcp").to_string(),
+                },
+                "kafka" => SourceType::Kafka {
+                    topic: config_val["topic"].as_str().unwrap_or("logs").to_string(),
+                    brokers: config_val["brokers"].as_array()
+                        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .unwrap_or_default(),
+                },
+                _ => SourceType::FileWatcher {
+                    path: config_val["path"].as_str().unwrap_or("").to_string(),
+                    pattern: config_val["pattern"].as_str().unwrap_or("*").to_string(),
+                },
+            };
+
             Ok(LogSource {
                 id: row.get(0)?,
                 name: row.get(1)?,
-                source_type: serde_json::from_str(&format!("\"{}\"", source_type_str)).unwrap_or(SourceType::FileWatcher {
-                    path: String::new(),
-                    pattern: String::new(),
-                }),
+                source_type,
                 hostname: row.get(3)?,
                 os: row.get(4)?,
                 enabled: row.get::<_, i32>(5)? != 0,
-                config: serde_json::from_str(&row.get::<_, String>(6)?).unwrap_or_default(),
+                config: config_val,
                 created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(7)?)
                     .map(|dt| dt.with_timezone(&chrono::Utc))
                     .unwrap_or_default(),
