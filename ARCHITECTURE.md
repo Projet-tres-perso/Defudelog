@@ -1,8 +1,8 @@
-# DeFuDoLog v2.0 — Architecture Document
+# DeFuDoLog v2.1 — Architecture Document
 
 ## 1. Vision & Objectifs
 
-**DeFuDoLog v2.0** est une plateforme desktop native de détection de fuites de données (Data Leak Prevention - DLP) et de gestion des événements de sécurité (SIEM/SOAR).
+**DeFuDoLog v2.1** est une plateforme native de détection de fuites de données (Data Leak Prevention - DLP), de gestion des événements de sécurité (SIEM/SOAR) et de surveillance réseau distribuée.
 
 Elle résout les limitations historiques des systèmes à base de règles statiques grâce à un **moteur de détection multi-axes parallélisé** combinant :
 - **L'analyse déterministe DLP** sans latence (mots-clés, regex pré-compilées, PII, secrets, règles SQLite).
@@ -10,7 +10,9 @@ Elle résout les limitations historiques des systèmes à base de règles statiq
 - **La sémantique vectorielle dense (ONNX / BGE embeddings)** et similarité cosinus avec des profils de menaces.
 - **Le clustering non supervisé (HDBSCAN)** sur fenêtre glissante.
 - **La corrélation temporelle continue par décroissance exponentielle** ($e^{-\lambda t}$).
-- **L'arbitrage contextuel par LLM (SOC Tier-2)** avec extraction chronologique des logs voisins (±10 logs).
+- **L'arbitrage contextuel par LLM (SOC Tier-2)** avec extraction chronologique des logs voisins ($\pm 10$ logs).
+- **L'accès réseau distant sécurisé (Console Web LAN)** avec authentification par clé à 7 caractères et contrôle d'accès RBAC (Admin / Analyste).
+- **Le streaming distribué d'entreprise via Apache Kafka** en ingestion et en publication des alertes enrichies.
 
 ---
 
@@ -20,24 +22,26 @@ Elle résout les limitations historiques des systèmes à base de règles statiq
 |--------|-------------|----------------------|
 | **Desktop Shell** | **Tauri 2.x** | Binaire natif ultra-léger (~15 Mo), zéro runtime Node en prod, sécurité par IPC isolée |
 | **Backend Core** | **Rust (1.75+)** | Performance C-like, sûreté mémoire sans Garbage Collector, parallélisme via Tokio |
+| **Console Web LAN** | **Tokio TcpListener (Rust natif)** | Serveur HTTP embarqué léger servant la console aux navigateurs du LAN sans serveur tiers |
 | **Frontend UI** | **React 18 + TypeScript + Tailwind CSS** | Interface SOC moderne, rendu temps réel fluide, graphiques via `Recharts` |
 | **Base de Données** | **SQLite + SQLCipher (AES-256)** | Chiffrement au repos, mode WAL haute concurrence, mmap 256 Mo |
 | **Parser Structural** | **Drain-like Rust + LazyLock Regex** | O(1) extraction de constantes/variables, catalogue de templates critiques/warnings |
 | **IA Sémantique** | **fastembed (ONNX Runtime / BGE-small)** | 384 dimensions denses, exécution locale C++ sans Python ni GPU |
 | **Clustering Outlier** | **HDBSCAN (Rust)** | Regroupement non supervisé par densité adaptative, détection de bruit (-1) |
+| **Streaming Entreprise** | **rdkafka / Apache Kafka (optionnel)** | Ingestion massive (Inbound) et transfert des alertes qualifiées (Outbound) |
 | **Surveillance Réseau** | **Tokio UDP/TCP + pnet** | Serveur Syslog RFC 5424 (port 1514) + Sniffer NDR passif |
 | **Interprétation IA** | **API LLM (OpenAI/Ollama/LocalAI/Claude)** | Triage contextuel automatisé SOC Tier-2 |
 
 ---
 
-## 3. Schéma de l'Architecture Multi-Axes
+## 3. Schéma Global du Flux de Données
 
 ```text
                                  ┌─────────────────────────────────────────────────────────┐
                                  │                    INGESTION ENTRÉE                     │
                                  │  • FileWatcher (notify)   • Windows EventLog (wevtutil) │
                                  │  • Journald (journalctl)  • macOS log (log stream)      │
-                                 │  • Syslog UDP/TCP (1514)  • NDR Sniffer (pnet)          │
+                                 │  • Syslog UDP/TCP (1514)  • Inbound Kafka Topic         │
                                  └───────────────────────────┬─────────────────────────────┘
                                                              │ RawLog + SHA-256 Hash
                                                              ▼
@@ -88,144 +92,51 @@ Elle résout les limitations historiques des systèmes à base de règles statiq
                                                                 │  (SOC Tier-2 Validation JSON) │
                                                                 └───────────────┬───────────────┘
                                                                                 │
-                                                    ┌───────────────────────────┴───────────────────────────┐
-                                                    ▼                                                       ▼
-                                        ┌───────────────────────┐                               ┌───────────────────────┐
-                                        │  EXPORT SIEM & WEBHOOK│                               │  RÉPONSE ACTIVE SOAR  │
-                                        │  • CEF / LEEF / RFC5424│                              │  • Script remédiation │
-                                        │  • Slack/Discord/Teams│                               │  • Blocage IP / Host  │
-                                        └───────────────────────┘                               └───────────────────────┘
+                                                    ┌───────────────────────────┼───────────────────────────┐
+                                                    ▼                           ▼                           ▼
+                                        ┌───────────────────────┐   ┌───────────────────────┐   ┌───────────────────────┐
+                                        │  EXPORT SIEM & WEBHOOK│   │  RÉPONSE ACTIVE SOAR  │   │ KAFKA OUTBOUND STREAM │
+                                        │  • CEF / LEEF / RFC5424│  │  • Script remédiation │   │  • Alertes enrichies  │
+                                        │  • Slack/Discord/Teams│   │  • Blocage IP / Host  │   │  • Format JSON ECS    │
+                                        └───────────────────────┘   └───────────────────────┘   └───────────────────────┘
 ```
 
 ---
 
-## 4. Modèle Mathématique de Détection & Formules
+## 4. Architecture de la Console Web LAN & Modèle de Sécurité RBAC
 
-### 4.1 Corrélation Temporelle (Exponential Decay)
-La densité d'événements pour une catégorie de motif $P$ au temps $t$ est calculée par :
-$$S_{\text{decay}}(P, t) = \sum_{t_i \in \text{Events}(P), t - t_i \le 300} e^{-\lambda (t - t_i)}$$
-avec $\lambda = 0.05$ (demi-vie temporelle d'environ 14 secondes).
-
-### 4.2 Similarité Sémantique Cosinus
-Soit $\vec{u}$ l'embedding BGE du log et $\vec{v}_{\text{menace}}$ le profil de référence (Exfiltration, Privilege Escalation, etc.) :
-$$\text{Sim}(\vec{u}, \vec{v}) = \frac{\vec{u} \cdot \vec{v}}{\|\vec{u}\|_2 \|\vec{v}\|_2} = \frac{\sum_{i=1}^{384} u_i v_i}{\sqrt{\sum u_i^2} \sqrt{\sum v_i^2}}$$
-
-### 4.3 Score de Risque Composite Final
-$$\text{Score}_{\text{composite}} = 0.30 \cdot S_{\text{DLP}} + 0.20 \cdot S_{\text{Template}} + 0.25 \cdot S_{\text{Sémantique}} + 0.15 \cdot S_{\text{Temporel}} + 0.10 \cdot S_{\text{Outlier\_HDBSCAN}}$$
-
-* **Règle d'Override Critique** : Si une signature DLP de criticité `High` ou un template `CriticalThreat` est validé, $\text{Score}_{\text{composite}} \ge 0.85$ immédiatement.
+Le composant `web_server.rs` implémente un serveur HTTP asynchrone autonome :
+1. **Écoute Réseau** : Bind sur `0.0.0.0:[PORT]` (configurable, par défaut 8080).
+2. **Authentification Sécurisée par Clé à 7 Caractères** :
+   - Évite les mots de passe vulnérables ou complexes sur le LAN.
+   - Générateur pseudo-aléatoire cryptographique basé sur un dictionnaire de 31 caractères non ambigus (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`).
+3. **Contrôle d'Accès basé sur les Rôles (RBAC)** :
+   - **Administrateur** : Authentifié par `(admin_username, admin_access_key)`. Accès total à tous les endpoints REST (`/api/stats`, `/api/logs`, `/api/alerts`, `/api/network`, `/api/rules`).
+   - **Utilisateur / Analyste** : Authentifié par `(user_username, user_access_key)`. Les requêtes vers les endpoints REST non autorisés sont rejetées avec un code HTTP `403 Forbidden` basé sur `user_allowed_views`.
 
 ---
 
-## 5. Schéma de la Base de Données (SQLite SQLCipher)
+## 5. Intégration Apache Kafka Entreprise
 
-```sql
--- 1. Sources de logs surveillées
-CREATE TABLE log_sources (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    source_type TEXT NOT NULL,
-    hostname TEXT NOT NULL,
-    os TEXT NOT NULL DEFAULT 'unknown',
-    enabled INTEGER NOT NULL DEFAULT 1,
-    config TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
--- 2. Logs bruts ingérés
-CREATE TABLE raw_logs (
-    id TEXT PRIMARY KEY,
-    source_id TEXT NOT NULL,
-    hostname TEXT NOT NULL,
-    raw_message TEXT NOT NULL,
-    log_hash TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
-    ingested_at TEXT NOT NULL,
-    FOREIGN KEY (source_id) REFERENCES log_sources(id)
-);
-CREATE INDEX idx_raw_logs_hash ON raw_logs(log_hash);
-CREATE INDEX idx_raw_logs_timestamp ON raw_logs(timestamp);
-
--- 3. Logs structurés parsés par Drain
-CREATE TABLE parsed_logs (
-    id TEXT PRIMARY KEY,
-    raw_log_id TEXT NOT NULL UNIQUE,
-    raw_message TEXT NOT NULL,
-    template TEXT NOT NULL,
-    template_id INTEGER NOT NULL,
-    parameters TEXT NOT NULL DEFAULT '[]',
-    parsed_at TEXT NOT NULL,
-    FOREIGN KEY (raw_log_id) REFERENCES raw_logs(id)
-);
-
--- 4. Embeddings vectoriels BGE
-CREATE TABLE log_embeddings (
-    id TEXT PRIMARY KEY,
-    parsed_log_id TEXT NOT NULL,
-    raw_log_id TEXT NOT NULL,
-    embedding BLOB NOT NULL,
-    dimension INTEGER NOT NULL DEFAULT 384,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (raw_log_id) REFERENCES raw_logs(id)
-);
-
--- 5. Alertes consolidées
-CREATE TABLE alerts (
-    id TEXT PRIMARY KEY,
-    raw_log_id TEXT NOT NULL,
-    parsed_log_id TEXT,
-    template TEXT,
-    category TEXT NOT NULL DEFAULT 'general',
-    supervised_score REAL,
-    anomaly_score REAL,
-    cluster_id INTEGER,
-    is_outlier INTEGER NOT NULL DEFAULT 0,
-    final_score REAL NOT NULL,
-    level TEXT NOT NULL DEFAULT 'low',
-    reasons TEXT NOT NULL DEFAULT '[]',
-    context_logs TEXT NOT NULL DEFAULT '[]',
-    llm_explanation TEXT,
-    mitigation_suggestion TEXT,
-    detected_at TEXT NOT NULL,
-    acknowledged INTEGER NOT NULL DEFAULT 0,
-    acknowledged_at TEXT,
-    FOREIGN KEY (raw_log_id) REFERENCES raw_logs(id)
-);
-CREATE INDEX idx_alerts_level ON alerts(level);
-CREATE INDEX idx_alerts_time ON alerts(detected_at);
-
--- 6. Règles de détection dynamiques
-CREATE TABLE detection_rules (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    rule_type TEXT NOT NULL,
-    pattern TEXT NOT NULL,
-    severity TEXT NOT NULL DEFAULT 'moderate',
-    enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL
-);
+```
+[ Équipements Réseau / Serveurs ]
+               │
+               ▼ (Topic entrant: logs)
+┌─────────────────────────────────────────────────────────────┐
+│                      DeFuDoLog v2.1                         │
+│  - Pipeline d'analyse multi-axes                            │
+│  - Normalisation & vectorisation                            │
+│  - Détection d'exfiltration DLP                             │
+└─────────────────────────────┬───────────────────────────────┘
+                              │ (Topic sortant: defudolog-alerts)
+                              ▼
+[ SIEM / SOC Central (Splunk, Elastic, Microsoft Sentinel) ]
 ```
 
 ---
 
-## 6. Protocoles d'Exportation SIEM
+## 6. Cycle de Vie et Désinstallation Propre (NSIS)
 
-DeFuDoLog implémente des formateurs natifs pour intégrer les alertes dans n'importe quel SIEM d'entreprise :
-
-1. **CEF (Common Event Format - ArcSight, Splunk)** :
-   `CEF:0|DeFuDoLog|Platform|2.0|DATA_LEAK|Fuite de données suspecte|9|rt=2026-08-15T12:00:00Z cat=data_leak score=0.92 msg=Clé privée RSA exposée`
-2. **LEEF (Log Event Extended Format - IBM QRadar)** :
-   `LEEF:2.0|DeFuDoLog|Platform|2.0|DATA_LEAK|	devTime=2026-08-15T12:00:00Z	cat=data_leak	sev=9	score=0.92	usrMsg=Clé privée RSA exposée`
-3. **Syslog RFC 5424 (Standard IETF)** :
-   `<11>1 2026-08-15T12:00:00Z localhost defudolog - data_leak [alert@defudolog level="high" score="0.92"] Clé privée RSA exposée`
-
----
-
-## 7. Sécurité & Confidentialité des Données
-
-- **Zéro fuite externe par défaut** : Tout le traitement (DLP, Drain, BGE, HDBSCAN, SQLite) tourne en mémoire locale sur la machine.
-- **Base SQLCipher chiffrée** : Protection des données forensiques au repos contre l'extraction physique de disque.
-- **Sandboxing IPC Tauri** : Aucune injection de script arbitraire n'est possible depuis la WebView.
-- **LLM Local ou Dédié** : Support complet d'instances privées via Ollama, LM Studio ou LocalAI.
+Sous Windows, le script `nsis_hooks.nsh` intervient lors du désabonnement de l'application :
+- Invite interactive `MessageBox MB_YESNO` pour confirmer la suppression des données.
+- Purge récursive de `%APPDATA%\defudolog` et `%LOCALAPPDATA%\defudolog` garantissant l'absence de traces résiduelles sur l'hôte.

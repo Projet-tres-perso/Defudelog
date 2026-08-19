@@ -243,6 +243,64 @@ pub struct AppSettings {
     pub llm: Option<LlmSettings>,
     pub webhook_url: Option<String>,
     pub active_response_script: Option<String>,
+    pub lan_server: LanServerSettings,
+    pub retention: RetentionSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetentionSettings {
+    pub auto_purge_enabled: bool,
+    pub retention_days: u32,
+    pub archive_before_purge: bool,
+    pub archive_directory: String,
+}
+
+impl Default for RetentionSettings {
+    fn default() -> Self {
+        Self {
+            auto_purge_enabled: false,
+            retention_days: 30,
+            archive_before_purge: true,
+            archive_directory: "archives".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PurgeResult {
+    pub purged_logs: u64,
+    pub purged_alerts: u64,
+    pub archive_file: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanServerSettings {
+    pub enabled: bool,
+    pub port: u16,
+    pub admin_username: String,
+    pub admin_access_key: String, // 7 caractères
+    pub user_username: String,
+    pub user_access_key: String,  // 7 caractères
+    pub user_allowed_views: Vec<String>, // ["dashboard", "logs", "alerts", "rules", "network"]
+}
+
+impl Default for LanServerSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 8080,
+            admin_username: "admin_soc".to_string(),
+            admin_access_key: "DF7K9QX".to_string(),
+            user_username: "analyste".to_string(),
+            user_access_key: "US4M2P8".to_string(),
+            user_allowed_views: vec![
+                "dashboard".to_string(),
+                "logs".to_string(),
+                "alerts".to_string(),
+            ],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -294,6 +352,8 @@ impl Default for AppSettings {
             kafka: None,
             llm: None,
             webhook_url: None,
+            lan_server: LanServerSettings::default(),
+            retention: RetentionSettings::default(),
             active_response_script: Some(
 "#!/bin/sh
 # Script de remédiation SOAR (Active Response)

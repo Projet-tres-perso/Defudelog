@@ -705,32 +705,101 @@ impl Database {
 
     pub fn get_timeseries_stats(&self) -> Result<Vec<TimeSeriesPoint>, AppError> {
         let conn = self.conn.lock();
+        let now = chrono::Utc::now();
+        let mut points = Vec::with_capacity(24);
 
-        let mut stmt = conn.prepare(
-            "WITH RECURSIVE hours(h) AS (
-                SELECT datetime(strftime('%Y-%m-%d %H:00:00', 'now', '-23 hours'))
-                UNION ALL
-                SELECT datetime(h, '+1 hour')
-                FROM hours
-                WHERE h < strftime('%Y-%m-%d %H:00:00', 'now')
-            )
-            SELECT 
-                strftime('%H:00', h.h) as time,
-                (SELECT COUNT(*) FROM raw_logs r WHERE r.timestamp >= h.h AND r.timestamp < datetime(h.h, '+1 hour')) as logs,
-                (SELECT COUNT(*) FROM alerts a WHERE a.detected_at >= h.h AND a.detected_at < datetime(h.h, '+1 hour')) as alerts
-            FROM hours h
-            ORDER BY h.h ASC"
-        )?;
+        for i in (0..24).rev() {
+            let target_hour = now - chrono::Duration::hours(i);
+            let hour_str = target_hour.format("%Y-%m-%d %H").to_string();
+            let label = target_hour.format("%H:00").to_string();
 
-        let timeseries: Vec<TimeSeriesPoint> = stmt.query_map([], |row| {
-            Ok(TimeSeriesPoint {
-                time: row.get(0)?,
-                logs: row.get(1)?,
-                alerts: row.get(2)?,
-            })
-        })?.filter_map(|r| r.ok()).collect();
+            // Match SQLite datetime substring or standard RFC3339 prefix
+            let pattern = format!("{}%", hour_str.replace(' ', "T"));
+            let pattern_alt = format!("{}%", hour_str);
 
-        Ok(timeseries)
+            let logs: u64 = conn.query_row(
+                "SELECT COUNT(*) FROM raw_logs WHERE timestamp LIKE ?1 OR timestamp LIKE ?2",
+                params![pattern, pattern_alt],
+                |r| r.get(0),
+            ).unwrap_or(0);
+
+            let alerts: u64 = conn.query_row(
+                "SELECT COUNT(*) FROM alerts WHERE detected_at LIKE ?1 OR detected_at LIKE ?2",
+                params![pattern, pattern_alt],
+                |r| r.get(0),
+            ).unwrap_or(0);
+
+            points.push(TimeSeriesPoint {
+                time: label,
+                logs,
+                alerts,
+            });
+        }
+
+        Ok(points)
+    }
+
+    /// Purge les anciens logs et alertes au-delà de `older_than_days` avec archivage optionnel
+    pub fn purge_logs(&self, older_than_days: u32, archive: bool, archive_dir: &str) -> Result<PurgeResult, AppError> {
+        let conn = self.conn.lock();
+        let cutoff = chrono::Utc::now() - chrono::Duration::days(older_than_days as i64);
+        let cutoff_iso = cutoff.to_rfc3339();
+        let cutoff_alt = cutoff.format("%Y-%m-%d %H:%M:%S").to_string();
+
+        let mut archive_file_path = None;
+
+        if archive {
+            let _ = std::fs::create_dir_all(archive_dir);
+            let timestamp_now = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+            let file_name = format!("{}/defudolog_archive_{}.json", archive_dir, timestamp_now);
+
+            // Récupérer les logs à archiver
+            let mut stmt = conn.prepare(
+                "SELECT id, source_id, hostname, raw_message, timestamp FROM raw_logs WHERE timestamp < ?1 OR timestamp < ?2"
+            )?;
+            let logs_to_archive: Vec<serde_json::Value> = stmt.query_map(params![cutoff_iso, cutoff_alt], |r| {
+                Ok(serde_json::json!({
+                    "id": r.get::<_, String>(0)?,
+                    "source_id": r.get::<_, String>(1)?,
+                    "hostname": r.get::<_, String>(2)?,
+                    "raw_message": r.get::<_, String>(3)?,
+                    "timestamp": r.get::<_, String>(4)?,
+                }))
+            })?.filter_map(|r| r.ok()).collect();
+
+            if !logs_to_archive.is_empty() {
+                if let Ok(json_str) = serde_json::to_string_pretty(&logs_to_archive) {
+                    if std::fs::write(&file_name, json_str).is_ok() {
+                        archive_file_path = Some(file_name);
+                    }
+                }
+            }
+        }
+
+        let purged_logs: u64 = conn.execute(
+            "DELETE FROM raw_logs WHERE timestamp < ?1 OR timestamp < ?2",
+            params![cutoff_iso, cutoff_alt],
+        )? as u64;
+
+        let purged_alerts: u64 = conn.execute(
+            "DELETE FROM alerts WHERE detected_at < ?1 OR detected_at < ?2",
+            params![cutoff_iso, cutoff_alt],
+        )? as u64;
+
+        // Optimiser SQLite après purge massive
+        let _ = conn.execute("PRAGMA optimize", []);
+
+        let message = format!(
+            "Purge terminée : {} logs et {} alertes supprimés (antérieurs à {} jours).",
+            purged_logs, purged_alerts, older_than_days
+        );
+
+        Ok(PurgeResult {
+            purged_logs,
+            purged_alerts,
+            archive_file: archive_file_path,
+            message,
+        })
     }
 
     // ─── Settings ───────────────────────────────────────

@@ -69,12 +69,10 @@ pub fn add_log_source(state: State<'_, AppState>, name: String, source_type: Str
     };
     state.db.insert_log_source(&source).map_err(|e| e.to_string())?;
 
-    // Recharger à chaud le collecteur si la surveillance est active
+    // Recharger et démarrer immédiatement la surveillance à chaud
     let mut collector = state.collector.lock();
-    if collector.is_running() {
-        collector.stop();
-        let _ = collector.start();
-    }
+    collector.stop();
+    let _ = collector.start();
 
     Ok(source)
 }
@@ -88,12 +86,10 @@ pub fn list_log_sources(state: State<'_, AppState>) -> Result<Vec<LogSource>, St
 pub fn toggle_log_source(state: State<'_, AppState>, source_id: String, enabled: bool) -> Result<(), String> {
     state.db.update_source_enabled(&source_id, enabled).map_err(|e| e.to_string())?;
     
-    // Recharger à chaud le collecteur si la surveillance est active
+    // Recharger à chaud le collecteur
     let mut collector = state.collector.lock();
-    if collector.is_running() {
-        collector.stop();
-        let _ = collector.start();
-    }
+    collector.stop();
+    let _ = collector.start();
     Ok(())
 }
 
@@ -101,12 +97,10 @@ pub fn toggle_log_source(state: State<'_, AppState>, source_id: String, enabled:
 pub fn delete_log_source(state: State<'_, AppState>, source_id: String) -> Result<(), String> {
     state.db.delete_log_source(&source_id).map_err(|e| e.to_string())?;
     
-    // Recharger à chaud le collecteur si la surveillance est active
+    // Recharger à chaud le collecteur
     let mut collector = state.collector.lock();
-    if collector.is_running() {
-        collector.stop();
-        let _ = collector.start();
-    }
+    collector.stop();
+    let _ = collector.start();
     Ok(())
 }
 
@@ -362,10 +356,77 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
 }
 
 #[tauri::command]
-pub fn update_settings(state: State<'_, AppState>, settings: AppSettings) -> Result<(), String> {
+pub async fn update_settings(state: State<'_, AppState>, settings: AppSettings) -> Result<(), String> {
+    let lan_settings = settings.lan_server.clone();
+    state.lan_server.update_settings(lan_settings.clone());
+
+    if lan_settings.enabled && !state.lan_server.is_running() {
+        let _ = state.lan_server.start().await;
+    } else if !lan_settings.enabled && state.lan_server.is_running() {
+        state.lan_server.stop();
+    }
+
     let mut current = state.settings.lock();
     *current = settings;
     state.db.save_settings(&current).map_err(|e| e.to_string())
+}
+
+// ─── LAN Web Server ────────────────────────────────
+
+#[tauri::command]
+pub async fn start_lan_server(state: State<'_, AppState>) -> Result<String, String> {
+    state.lan_server.start().await
+}
+
+#[tauri::command]
+pub fn stop_lan_server(state: State<'_, AppState>) -> Result<(), String> {
+    state.lan_server.stop();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_lan_server_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let s = state.lan_server.get_settings();
+    let is_running = state.lan_server.is_running();
+    let local_ip = crate::web_server::LanWebServer::get_local_ip();
+    let url = format!("http://{}:{}", local_ip, s.port);
+
+    Ok(serde_json::json!({
+        "is_running": is_running,
+        "port": s.port,
+        "local_ip": local_ip,
+        "url": url,
+        "admin_username": s.admin_username,
+        "admin_access_key": s.admin_access_key,
+        "user_username": s.user_username,
+        "user_access_key": s.user_access_key,
+        "user_allowed_views": s.user_allowed_views,
+    }))
+}
+
+#[tauri::command]
+pub fn generate_random_access_key() -> Result<String, String> {
+    use rand::Rng;
+    const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 31 caractères lisibles sans ambiguïté (pas de O, 0, 1, I)
+    let mut rng = rand::thread_rng();
+    let key: String = (0..7)
+        .map(|_| {
+            let idx = rng.gen_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
+        .collect();
+    Ok(key)
+}
+
+#[tauri::command]
+pub fn purge_old_logs(
+    state: State<'_, AppState>,
+    days: u32,
+    archive: bool,
+    archive_dir: Option<String>,
+) -> Result<PurgeResult, String> {
+    let dir = archive_dir.unwrap_or_else(|| "archives".to_string());
+    state.db.purge_logs(days, archive, &dir).map_err(|e| e.to_string())
 }
 
 // ─── Context & Templates ───────────────────────────

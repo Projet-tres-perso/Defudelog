@@ -121,6 +121,32 @@ export interface AppSettings {
   llm: LlmSettings | null;
   webhook_url?: string | null;
   active_response_script: string | null;
+  lan_server: LanServerSettings;
+  retention: RetentionSettings;
+}
+
+export interface RetentionSettings {
+  auto_purge_enabled: boolean;
+  retention_days: number;
+  archive_before_purge: boolean;
+  archive_directory: string;
+}
+
+export interface PurgeResult {
+  purged_logs: number;
+  purged_alerts: number;
+  archive_file: string | null;
+  message: string;
+}
+
+export interface LanServerSettings {
+  enabled: boolean;
+  port: number;
+  admin_username: string;
+  admin_access_key: string;
+  user_username: string;
+  user_access_key: string;
+  user_allowed_views: string[];
 }
 
 export interface DetectionSettings {

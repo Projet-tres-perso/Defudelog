@@ -132,47 +132,129 @@ ${a.reasons.map((r) => `  * ${r}`).join("\n")}
 `;
   };
 
+  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string; filename?: string; size?: string } | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<string | null>(null);
+
+  const showNotification = (message: string, filename?: string, size?: string) => {
+    setNotification({ type: "success", message, filename, size });
+    setTimeout(() => setNotification(null), 5000);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} o`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+  };
+
   const downloadReportMarkdown = () => {
     if (!reportMarkdown) return;
     const blob = new Blob([reportMarkdown], { type: "text/markdown" });
+    const filename = `rapport_secu_defudolog_${Date.now()}.md`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `rapport_secu_defudolog_${Date.now()}.md`;
+    a.download = filename;
     a.click();
+    showNotification("Rapport Markdown téléchargé avec succès.", filename, formatFileSize(blob.size));
   };
 
   const exportAlertsJson = async () => {
+    setExportingFormat("json");
     try {
       const alertsResult = await invoke<{ alerts: Alert[] }>("get_alerts", { level: null, page: 1, perPage: 1000 });
-      const blob = new Blob([JSON.stringify(alertsResult.alerts, null, 2)], { type: "application/json" });
+      const alerts = alertsResult.alerts || [];
+      const content = JSON.stringify(alerts, null, 2);
+      const blob = new Blob([content], { type: "application/json" });
+      const filename = `alertes_defudolog_${Date.now()}.json`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `alertes_defudolog_${Date.now()}.json`;
+      a.download = filename;
       a.click();
-    } catch (e) {
-      console.error(e);
+      showNotification(`Export JSON réussi (${alerts.length} alertes).`, filename, formatFileSize(blob.size));
+    } catch (e: any) {
+      setNotification({ type: "error", message: "Erreur lors de l'export JSON : " + (e?.message || e) });
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
+  const exportAlertsCsv = async () => {
+    setExportingFormat("csv");
+    try {
+      const alertsResult = await invoke<{ alerts: Alert[] }>("get_alerts", { level: null, page: 1, perPage: 1000 });
+      const alerts = alertsResult.alerts || [];
+      const headers = ["ID", "Horodatage", "Niveau", "Catégorie", "Score", "Modèle/Template", "Explication IA"];
+      const rows = alerts.map(a => [
+        `"${a.id}"`,
+        `"${new Date(a.detected_at).toLocaleString('fr-FR')}"`,
+        `"${a.level}"`,
+        `"${a.category}"`,
+        `"${(a.final_score * 100).toFixed(0)}%"`,
+        `"${(a.template || '').replace(/"/g, '""')}"`,
+        `"${(a.llm_explanation || '').replace(/"/g, '""')}"`
+      ]);
+      const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const filename = `alertes_defudolog_${Date.now()}.csv`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      showNotification(`Export CSV réussi (${alerts.length} alertes exportées).`, filename, formatFileSize(blob.size));
+    } catch (e: any) {
+      setNotification({ type: "error", message: "Erreur lors de l'export CSV : " + (e?.message || e) });
+    } finally {
+      setExportingFormat(null);
     }
   };
 
   const exportSiem = async (format: "cef" | "leef" | "syslog") => {
+    setExportingFormat(format);
     try {
       const exportedContent = await invoke<string>("export_alerts_siem", { format });
       const ext = format === "cef" ? "cef" : format === "leef" ? "leef" : "log";
       const blob = new Blob([exportedContent], { type: "text/plain" });
+      const filename = `alertes_siem_${format}_${Date.now()}.${ext}`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `alertes_siem_${format}_${Date.now()}.${ext}`;
+      a.download = filename;
       a.click();
-    } catch (e) {
-      console.error(e);
+      const formatName = format === "cef" ? "CEF (ArcSight / Splunk)" : format === "leef" ? "LEEF (IBM QRadar)" : "Syslog RFC 5424";
+      showNotification(`Export ${formatName} téléchargé avec succès.`, filename, formatFileSize(blob.size));
+    } catch (e: any) {
+      setNotification({ type: "error", message: "Erreur lors de l'export SIEM : " + (e?.message || e) });
+    } finally {
+      setExportingFormat(null);
     }
   };
 
   return (
     <div className="p-6 space-y-6">
+      {/* Toast Notification */}
+      {notification && (
+        <div className={`p-4 rounded-xl border flex items-center justify-between shadow-2xl transition-all animate-in fade-in slide-in-from-top-2 ${
+          notification.type === "success"
+            ? "bg-emerald-950/80 border-emerald-500/50 text-emerald-200"
+            : "bg-red-950/80 border-red-500/50 text-red-200"
+        }`}>
+          <div className="flex items-center gap-3">
+            <CheckCircle2 size={20} className={notification.type === "success" ? "text-emerald-400" : "text-red-400"} />
+            <div>
+              <p className="text-xs font-bold">{notification.message}</p>
+              {notification.filename && (
+                <p className="text-2xs font-mono text-surface-300 mt-0.5">
+                  Fichier : <strong className="text-white">{notification.filename}</strong> {notification.size && `(${notification.size})`}
+                </p>
+              )}
+            </div>
+          </div>
+          <button onClick={() => setNotification(null)} className="text-xs opacity-70 hover:opacity-100 px-2 py-1">✕</button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -184,25 +266,62 @@ ${a.reasons.map((r) => `  * ${r}`).join("\n")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {/* SIEM Export Group */}
           <div className="flex items-center gap-1 bg-surface-900 p-1 rounded-xl border border-surface-700">
-            <span className="text-3xs text-surface-400 font-semibold px-2">Export SIEM:</span>
-            <button onClick={() => exportSiem("cef")} className="btn-secondary text-2xs py-1 px-2.5" title="CEF (Common Event Format) pour Splunk, ArcSight">
-              CEF
+            <span className="text-3xs text-surface-400 font-semibold px-2">SIEM:</span>
+            <button
+              onClick={() => exportSiem("cef")}
+              disabled={exportingFormat !== null}
+              className="btn-secondary text-2xs py-1 px-2.5 hover:text-blue-400 transition"
+              title="CEF (Common Event Format) pour Splunk, ArcSight"
+            >
+              {exportingFormat === "cef" ? "..." : "CEF"}
             </button>
-            <button onClick={() => exportSiem("leef")} className="btn-secondary text-2xs py-1 px-2.5" title="LEEF (Log Event Extended Format) pour IBM QRadar">
-              LEEF
+            <button
+              onClick={() => exportSiem("leef")}
+              disabled={exportingFormat !== null}
+              className="btn-secondary text-2xs py-1 px-2.5 hover:text-amber-400 transition"
+              title="LEEF (Log Event Extended Format) pour IBM QRadar"
+            >
+              {exportingFormat === "leef" ? "..." : "LEEF"}
             </button>
-            <button onClick={() => exportSiem("syslog")} className="btn-secondary text-2xs py-1 px-2.5" title="Standard Syslog RFC 5424">
-              Syslog
+            <button
+              onClick={() => exportSiem("syslog")}
+              disabled={exportingFormat !== null}
+              className="btn-secondary text-2xs py-1 px-2.5 hover:text-emerald-400 transition"
+              title="Standard Syslog RFC 5424"
+            >
+              {exportingFormat === "syslog" ? "..." : "Syslog"}
             </button>
           </div>
-          <button onClick={exportAlertsJson} className="btn-secondary flex items-center gap-2">
-            <FileSpreadsheet size={16} />
-            JSON
+
+          <button
+            onClick={exportAlertsCsv}
+            disabled={exportingFormat !== null}
+            className="btn-secondary flex items-center gap-1.5 text-xs"
+            title="Exporter les alertes au format CSV pour Excel"
+          >
+            <FileSpreadsheet size={15} className="text-emerald-400" />
+            {exportingFormat === "csv" ? "Export..." : "CSV (Excel)"}
           </button>
-          <button onClick={generateReport} disabled={generating} className="btn-primary flex items-center gap-2">
+
+          <button
+            onClick={exportAlertsJson}
+            disabled={exportingFormat !== null}
+            className="btn-secondary flex items-center gap-1.5 text-xs"
+            title="Exporter les alertes au format JSON brut"
+          >
+            <Download size={15} className="text-blue-400" />
+            {exportingFormat === "json" ? "Export..." : "JSON"}
+          </button>
+
+          <button
+            onClick={generateReport}
+            disabled={generating}
+            className="btn-primary flex items-center gap-2 text-xs"
+          >
             <Sparkles size={16} className="text-amber-300" />
-            {generating ? "Génération..." : "Générer Rapport IA"}
+            {generating ? "Génération IA..." : "Générer Rapport IA"}
           </button>
         </div>
       </div>

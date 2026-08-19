@@ -45,6 +45,11 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "Plateforme de détection de fuite de données",
-    "longDescription": "DeFuDoLog est une plateforme desktop de détection de fuite de données par analyse multi-couche de logs (parsing, embeddings, clustering, détection d'anomalies)."
+    "longDescription": "DeFuDoLog est une plateforme desktop de détection de fuite de données par analyse multi-couche de logs (parsing, embeddings, clustering, détection d'anomalies).",
+    "windows": {
+      "nsis": {
+        "installerHooks": "nsis_hooks.nsh"
+      }
+    }
   }
 }

@@ -286,7 +286,7 @@ impl LogCollector {
         thread::spawn(move || {
             // Lecture initiale des 25 derniers événements existants pour éviter le cold-start vide
             let init_script = format!(
-                r#"Get-WinEvent -LogName '{}' -MaxEvents 25 2>$null | Sort-Object TimeCreated | ForEach-Object {{ $_.TimeCreated.ToString('yyyy-MM-ddTHH:mm:ssZ') + ' [' + $_.LevelDisplayName + '] EventID=' + $_.Id + ' Provider=' + $_.ProviderName + ' ' + ($_.Message -replace '[\r\n]+', ' ') }}"#,
+                r#"Get-WinEvent -LogName '{}' -MaxEvents 25 | Sort-Object TimeCreated | ForEach-Object {{ $_.TimeCreated.ToString('yyyy-MM-ddTHH:mm:ssZ') + ' [' + $_.LevelDisplayName + '] EventID=' + $_.Id + ' Provider=' + $_.ProviderName + ' ' + ($_.Message -replace '[\r\n]+', ' ') }}"#,
                 channel
             );
 
@@ -297,23 +297,31 @@ impl LogCollector {
                 .arg(&init_script);
 
             if let Ok(output) = init_cmd.output() {
-                let text = String::from_utf8_lossy(&output.stdout);
-                for line in text.lines() {
-                    let trimmed = line.trim();
-                    if !trimmed.is_empty() {
-                        let _ = Self::ingest_line(
-                            &db,
-                            engine.as_ref(),
-                            app_handle.as_ref(),
-                            &source_id,
-                            &hostname,
-                            trimmed,
-                        );
+                if !output.status.success() {
+                    let err_text = String::from_utf8_lossy(&output.stderr);
+                    if err_text.contains("Access is denied") || err_text.contains("accès est refusé") || err_text.contains("UnauthorizedAccess") {
+                        let warn_msg = format!("[DEFUDOLOG WARNING] Accès restreint au canal Windows '{}'. Lancez DeFuDoLog en tant qu'Administrateur pour surveiller ce canal.", channel);
+                        let _ = Self::ingest_line(&db, engine.as_ref(), app_handle.as_ref(), &source_id, &hostname, &warn_msg);
+                    }
+                } else {
+                    let text = String::from_utf8_lossy(&output.stdout);
+                    for line in text.lines() {
+                        let trimmed = line.trim();
+                        if !trimmed.is_empty() {
+                            let _ = Self::ingest_line(
+                                &db,
+                                engine.as_ref(),
+                                app_handle.as_ref(),
+                                &source_id,
+                                &hostname,
+                                trimmed,
+                            );
+                        }
                     }
                 }
             }
 
-            // Suivi en continu des nouveaux événements avec mémorisation du dernier RecordID
+            // Suivi en continu des nouveaux événements
             let loop_script = format!(
                 r#"$lastTime = (Get-Date).AddSeconds(-5); while($true) {{ $events = Get-WinEvent -FilterHashtable @{{LogName='{}'; StartTime=$lastTime}} -ErrorAction SilentlyContinue | Sort-Object TimeCreated; if ($events) {{ foreach ($e in $events) {{ $msg = $e.TimeCreated.ToString('yyyy-MM-ddTHH:mm:ssZ') + ' [' + $e.LevelDisplayName + '] EventID=' + $e.Id + ' Provider=' + $e.ProviderName + ' ' + ($e.Message -replace '[\r\n]+', ' '); [Console]::WriteLine($msg); }}; $lastTime = (Get-Date); }}; Start-Sleep -Milliseconds 1500; }}"#,
                 channel

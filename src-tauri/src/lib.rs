@@ -9,10 +9,12 @@ pub mod webhook_notifier;
 pub mod active_response;
 pub mod commands;
 pub mod network;
+pub mod web_server;
 
 use db::Database;
 use engine::DetectionPipeline;
 use syslog_listener::SyslogServer;
+use web_server::LanWebServer;
 use parking_lot::Mutex;
 use std::sync::Arc;
 use tauri::Manager;
@@ -26,6 +28,7 @@ pub struct AppState {
     pub syslog_server: Arc<SyslogServer>,
     pub collector: Arc<Mutex<collector::LogCollector>>,
     pub network_sniffer: Arc<network::NetworkSniffer>,
+    pub lan_server: Arc<LanWebServer>,
 }
 
 impl AppState {
@@ -40,8 +43,19 @@ impl AppState {
             Some(engine.clone()),
             Some(app_handle.clone()),
         )));
+        
+        // Auto-démarrage immédiat de la collecte pour toutes les sources activées
+        {
+            let mut col = collector.lock();
+            if let Err(e) = col.start() {
+                log::warn!("Auto-démarrage du collecteur : {}", e);
+            }
+        }
+
         let network_sniffer = Arc::new(network::NetworkSniffer::new(db.clone(), app_handle.clone()));
         network_sniffer.start();
+
+        let lan_server = Arc::new(LanWebServer::new(db.clone(), settings.lan_server.clone()));
 
         Ok(Self {
             db,
@@ -50,6 +64,7 @@ impl AppState {
             syslog_server,
             collector,
             network_sniffer,
+            lan_server,
         })
     }
 }
@@ -169,6 +184,11 @@ pub fn run() {
             commands::test_webhook,
             commands::test_llm_connection,
             commands::test_soar_script,
+            commands::start_lan_server,
+            commands::stop_lan_server,
+            commands::get_lan_server_status,
+            commands::generate_random_access_key,
+            commands::purge_old_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DeFuDoLog");

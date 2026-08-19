@@ -279,14 +279,14 @@ export default function Dashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
-                <XAxis dataKey="timestamp" stroke="#64748b" fontSize={11} tickLine={false} />
-                <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
+                <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickLine={false} />
+                <YAxis stroke="#64748b" fontSize={11} tickLine={false} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155", borderRadius: "0.5rem", fontSize: "12px" }}
                   itemStyle={{ color: "#e2e8f0" }}
                 />
-                <Area type="monotone" dataKey="log_count" name="Logs reçus" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#logGradient)" />
-                <Area type="monotone" dataKey="alert_count" name="Alertes" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#alertGradient)" />
+                <Area type="monotone" dataKey="logs" name="Logs reçus" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#logGradient)" />
+                <Area type="monotone" dataKey="alerts" name="Alertes qualifiées" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#alertGradient)" />
               </AreaChart>
             </ResponsiveContainer>
           ) : (

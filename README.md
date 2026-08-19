@@ -1,4 +1,4 @@
-# DeFuDoLog v2.0 — Data Leak Detection & SIEM Platform
+# DeFuDoLog v2.1 — Data Leak Detection, SIEM & Network Platform
 
 [![Release](https://img.shields.io/github/v/release/Projet-tres-perso/Defudelog?style=flat-square&color=blue)](https://github.com/Projet-tres-perso/Defudelog/releases)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/Projet-tres-perso/Defudelog/release.yml?branch=main&style=flat-square)](https://github.com/Projet-tres-perso/Defudelog/actions)
@@ -6,46 +6,44 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-24C8D8?style=flat-square&logo=tauri)](https://tauri.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-**DeFuDoLog v2.0** est une plateforme desktop professionnelle de détection de fuites de données (DLP), d'analyse de journaux d'événements et de réponse aux incidents (SIEM/SOAR). Conçue en **Rust** et **Tauri/React**, elle offre une analyse multi-axes à haute performance, 100% autonome et respectueuse de la confidentialité des données.
+**DeFuDoLog v2.1** est une plateforme desktop et réseau de détection de fuites de données (DLP), d'analyse d'événements de sécurité et de réponse aux incidents (SIEM/SOAR). Conçue en **Rust** et **Tauri/React**, elle offre une analyse multi-axes à haute performance, 100% autonome et respectueuse de la confidentialité des données.
 
 ---
 
-## 🌟 Fonctionnalités Clés
+## 🌟 Nouveautés Majeures de la Version 2.1
 
-- **Moteur de Détection Multi-Axes Parallélisé** :
-  - **DLP & Signatures Déterministes** : Détection sans latence des clés privées RSA/SSH, tokens, mots de passe en clair, regex PII et règles SQLite dynamiques.
-  - **Mineur de Templates Drain** : Extraction des variables, catalogue de templates critiques/warnings et détection d'anomalies structurelles (Zero-Day).
-  - **Intelligence Sémantique BGE (ONNX)** : Vectorisation dense (384 dimensions) et similarité cosinus avec les profils de cyber-menaces.
-  - **Clustering Non Supervisé HDBSCAN** : Détection d'outliers et de clusters atypiques sur fenêtre glissante de logs.
-  - **Corrélation Temporelle Continue** : Détection de rafales d'attaques par décroissance exponentielle ($e^{-\lambda t}$).
-  - **Validation Contextuelle par LLM (SOC Tier-2)** : Reconstitution de la storyline avec les logs voisins (±10 logs) pour éliminer 85%+ des faux positifs.
-- **Surveillance Multi-OS (Endpoint)** : Surveillance native de fichiers plats (`notify`), Journald (Linux), Unified Log (macOS), et Windows Event Log.
-- **Surveillance Réseau & NDR** :
-  - **Serveur Syslog intégré** (UDP/TCP port 1514) pour centraliser les logs de serveurs et pare-feu distants sans agent tiers.
-  - **Sniffer Réseau Passif (`pnet`)** pour la capture et l'analyse de métadonnées de flux TCP/UDP.
-- **Stockage Sécurisé & Chiffré** : Base de données SQLite chiffrée en **SQLCipher (AES-256)** avec mode WAL haute concurrence.
-- **Interopérabilité SIEM & Réponse Active (SOAR)** :
-  - Exportation native aux formats **CEF** (ArcSight/Splunk), **LEEF** (QRadar), et **Syslog RFC 5424**.
-  - Déclenchement automatique de scripts de remédiation active et notifications **Webhooks** (Slack, Discord, Teams).
+- 🚀 **Surveillance Immédiate Auto-démarrée** : Le moteur de collecte s'active instantanément au lancement de l'application sur toutes les sources actives (Windows Event Log, macOS Unified Log, journald, fichiers plats).
+- 🌐 **Console Web LAN Embarquée (`IP:PORT`)** : Accès distant au tableau de bord depuis n'importe quel navigateur du réseau local avec authentification par clé de 7 caractères et gestion des rôles :
+  - **👑 Profil Administrateur** : Accès intégral à l'ensemble des écrans et configurations.
+  - **👤 Profil Analyste (User)** : Vues visibles configurables et restreintes par l'administrateur depuis l'application desktop.
+- ⚡ **Connecteur Apache Kafka Bi-Directionnel** :
+  - **Inbound** : Ingestion haute cadence de logs bruts depuis un topic Kafka.
+  - **Outbound** : Publication en continu des logs enrichis et des alertes qualifiées (format ECS standardisé) vers un topic Kafka externe.
+- 🧹 **Désinstallation Propre sous Windows (NSIS)** : Option interactive lors de la désinstallation pour supprimer l'intégralité des données de surveillance résiduelles (`%APPDATA%\defudolog`).
 
 ---
 
 ## 🏗️ Architecture du Système
 
 ```text
-DeFuDoLog v2.0
-├── 🖥️ Interface Utilisateur (React 18, TypeScript, Tailwind CSS, Recharts)
-│   ├── Dashboard — Métriques globales, séries temporelles et tendances de menaces
+DeFuDoLog v2.1
+├── 🖥️ Interface Utilisateur Desktop (React 18, TypeScript, Tailwind CSS, Recharts)
+│   ├── Dashboard — Métriques globales, séries temporelles et flux de logs direct
 │   ├── LogViewer — Exploration temps réel, recherche plein-texte et contexte chronologique
 │   ├── Alertes — Gestion des alertes, validation SOC, triages et filtrages
-│   ├── Sources — Gestion des collecteurs locaux et du serveur Syslog
+│   ├── Sources — Gestion des collecteurs locaux, Windows Event Log et Syslog
 │   ├── Règles — Création et gestion dynamique des règles de détection DLP
-│   └── Configuration — Paramétrage du moteur, seuils, LLM et scripts SOAR
+│   └── Configuration — Paramétrage du moteur, Kafka, Serveur LAN, LLM et SOAR
+│
+├── 🌐 Console Web Distante LAN (Serveur HTTP Rust Tokio Embarqué)
+│   ├── Authentification par clé d'accès sécurisée à 7 caractères
+│   └── Contrôle d'accès RBAC (Admin total vs Analyste restreint)
 │
 └── 🦀 Moteur Backend (Rust 100% Natif sous Tauri 2)
     ├── db.rs — SQLite SQLCipher (WAL, mmap 256 Mo, indexations avancées)
     ├── engine.rs — Détection multi-axes (DLP, Drain, BGE/ONNX, HDBSCAN, Decay, LLM)
-    ├── collector.rs — Collecteurs multi-OS (Fichiers, Journald, macOS log, Windows EventLog)
+    ├── collector.rs — Collecteurs multi-OS (Fichiers, Journald, macOS log, Windows EventLog, Kafka)
+    ├── web_server.rs — Serveur Web LAN asynchrone embarqué
     ├── syslog_listener.rs — Serveur Syslog réseau asynchrone (Tokio UDP/TCP)
     ├── network.rs — Sniffer NDR passif bas niveau (pnet)
     ├── active_response.rs — Moteur d'exécution de remédiation SOAR
@@ -99,14 +97,13 @@ npm run tauri build
 
 ---
 
-## 📖 Documentation Complète
+## 📚 Documentation Complète
 
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** : Spécifications architecturales détaillées, structures de données, modèle mathématique et flux de données.
-- **[Manuel.md](./Manuel.md)** : Manuel pédagogique et technique approfondi expliquant les algorithmes (Drain, ONNX, HDBSCAN, Exponential Decay, LLM).
-- **[Analyse_perspective.md](./Analyse_perspective.md)** : Comparatif historique (v1 vs v2), audit de robustesse et perspectives d'évolution.
+- [Manuel Pédagogique et Technique Approfondi](Manuel.md)
+- [Architecture & Spécifications Internes](ARCHITECTURE.md)
 
 ---
 
 ## 📄 Licence
 
-Distribué sous licence **MIT**. Voir `LICENSE` pour plus d'informations.
+Ce projet est sous licence open-source [MIT](LICENSE).
