@@ -40,6 +40,8 @@ export default function Sources() {
   const [newPath, setNewPath] = useState("");
   const [newPattern, setNewPattern] = useState("*.log");
   const [newChannel, setNewChannel] = useState("Application");
+  const [newKafkaTopic, setNewKafkaTopic] = useState("logs");
+  const [newKafkaBrokers, setNewKafkaBrokers] = useState("localhost:9092");
   const [testResult, setTestResult] = useState<{ok: boolean, msg: string} | null>(null);
 
   // Mock data for sparklines
@@ -171,6 +173,15 @@ export default function Sources() {
         config = { predicate: null };
       } else if (newType === "journald") {
         config = { unit_filter: null };
+      } else if (newType === "kafka") {
+        if (!newKafkaTopic.trim() || !newKafkaBrokers.trim()) {
+          alert("Veuillez renseigner le topic et les brokers Kafka.");
+          return;
+        }
+        config = {
+          topic: newKafkaTopic.trim(),
+          brokers: newKafkaBrokers.split(",").map(b => b.trim()).filter(Boolean),
+        };
       }
 
       const detectedOs = navigator.userAgent.includes("Win")
@@ -544,6 +555,7 @@ export default function Sources() {
                         <option value="journald">Systemd Journald</option>
                         <option value="windows_event_log">Windows Event Log</option>
                         <option value="macos_unified_log">macOS Unified Log</option>
+                        <option value="kafka">Apache Kafka (Streaming)</option>
                       </select>
                     </label>
                   </div>
@@ -637,6 +649,33 @@ export default function Sources() {
                     </label>
                   )}
                   
+                  {newType === "kafka" && (
+                    <div className="space-y-4 p-4 bg-surface-800/50 rounded-xl border border-surface-700">
+                      <label className="block">
+                        <span className="text-sm font-medium text-surface-300">Topic Kafka *</span>
+                        <input
+                          type="text"
+                          required
+                          placeholder="logs"
+                          className="input mt-1.5 w-full bg-surface-800 font-mono text-xs"
+                          value={newKafkaTopic}
+                          onChange={e => setNewKafkaTopic(e.target.value)}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-sm font-medium text-surface-300">Brokers (séparés par virgule) *</span>
+                        <input
+                          type="text"
+                          required
+                          placeholder="localhost:9092, kafka-2:9092"
+                          className="input mt-1.5 w-full bg-surface-800 font-mono text-xs"
+                          value={newKafkaBrokers}
+                          onChange={e => setNewKafkaBrokers(e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  )}
+
                   {testResult && (
                     <div className={`p-3 rounded-lg text-sm flex items-center gap-2 ${testResult.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
                       {testResult.ok ? <Check size={16} /> : <X size={16} />}

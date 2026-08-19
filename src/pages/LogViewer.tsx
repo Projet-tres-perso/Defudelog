@@ -22,20 +22,15 @@ export default function LogViewer() {
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await invoke<[RawLog[], number]>("get_raw_logs", {
+      const result = await invoke<{ logs: RawLog[]; total: number }>("get_raw_logs", {
         limit: perPage,
         offset: (page - 1) * perPage,
-        query: search.trim() ? search.trim() : null,
+        search: search.trim() ? search.trim() : null,
         sourceId: sourceFilter.trim() ? sourceFilter.trim() : null,
       });
 
-      if (Array.isArray(result) && result[0]) {
-        setLogs(result[0]);
-        setTotal(result[1] || 0);
-      } else if (Array.isArray(result)) {
-        setLogs(result as unknown as RawLog[]);
-        setTotal(result.length);
-      }
+      setLogs(result?.logs || []);
+      setTotal(result?.total || 0);
     } catch (e) {
       console.error("Failed to fetch logs:", e);
     } finally {

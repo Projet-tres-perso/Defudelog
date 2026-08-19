@@ -206,18 +206,46 @@ pub fn get_syslog_status(state: State<'_, AppState>) -> Result<serde_json::Value
 
 // ─── Log Retrieval ─────────────────────────────────
 
+/// Accepte les deux conventions d'appel:
+/// - Dashboard: { limit, offset, query, sourceId }
+/// - LogViewer: { page, perPage, search }
 #[tauri::command]
-pub fn get_raw_logs(state: State<'_, AppState>, page: Option<usize>, per_page: Option<usize>,
-    search: Option<String>) -> Result<serde_json::Value, String>
+pub fn get_raw_logs(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    page: Option<usize>,
+    per_page: Option<usize>,
+    search: Option<String>,
+    query: Option<String>,
+    source_id: Option<String>,
+) -> Result<serde_json::Value, String>
 {
-    let page = page.unwrap_or(1);
-    let per_page = per_page.unwrap_or(50);
-    let offset = (page - 1) * per_page;
-    let (logs, total) = state.db.get_raw_logs(per_page, offset, None, search.as_deref())
-        .map_err(|e| e.to_string())?;
+    // Résoudre les paramètres de manière rétrocompatible
+    let effective_search = search.or(query);
+    let (effective_limit, effective_offset) = if let Some(lim) = limit {
+        (lim, offset.unwrap_or(0))
+    } else {
+        let p = page.unwrap_or(1);
+        let pp = per_page.unwrap_or(50);
+        (pp, (p - 1) * pp)
+    };
+
+    let (logs, total) = state.db.get_raw_logs(
+        effective_limit,
+        effective_offset,
+        source_id.as_deref(),
+        effective_search.as_deref(),
+    ).map_err(|e| e.to_string())?;
+
+    let effective_page = if effective_limit > 0 { effective_offset / effective_limit + 1 } else { 1 };
+
     Ok(serde_json::json!({
-        "logs": logs, "total": total, "page": page, "per_page": per_page,
-        "total_pages": (total as f64 / per_page as f64).ceil() as u64,
+        "logs": logs,
+        "total": total,
+        "page": effective_page,
+        "per_page": effective_limit,
+        "total_pages": if effective_limit > 0 { (total as f64 / effective_limit as f64).ceil() as u64 } else { 1 },
     }))
 }
 

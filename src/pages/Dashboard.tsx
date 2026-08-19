@@ -50,12 +50,8 @@ export default function Dashboard() {
       const alertsRes = await invoke<{ alerts: Alert[] }>("get_alerts", { level: null, page: 1, perPage: 6 });
       setRecentAlerts(alertsRes.alerts || []);
 
-      const logsRes = await invoke<[RawLog[], number]>("get_raw_logs", { limit: 12, offset: 0, query: null, sourceId: null });
-      if (Array.isArray(logsRes) && logsRes[0]) {
-        setRecentLogs(logsRes[0]);
-      } else if (Array.isArray(logsRes)) {
-        setRecentLogs(logsRes as unknown as RawLog[]);
-      }
+      const logsRes = await invoke<{ logs: RawLog[]; total: number }>("get_raw_logs", { limit: 12, offset: 0 });
+      setRecentLogs(logsRes?.logs || []);
 
       const monStatus = await invoke<{ monitoring: boolean }>("get_monitoring_status");
       setIsMonitoring(monStatus?.monitoring ?? false);

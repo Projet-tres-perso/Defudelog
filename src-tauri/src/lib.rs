@@ -96,7 +96,11 @@ pub fn run() {
             let quit_i = MenuItemBuilder::with_id("quit", "Quitter Définitivement").build(app)?;
             let menu = MenuBuilder::new(app).items(&[&show_i, &status_i, &quit_i]).build()?;
 
+            let tray_icon = app.default_window_icon().cloned()
+                .expect("No default window icon configured in tauri.conf.json");
+
             let _tray = TrayIconBuilder::new()
+                .icon(tray_icon)
                 .menu(&menu)
                 .tooltip("DeFuDoLog — Surveillance et Détection DLP en Tâche de Fond")
                 .on_menu_event(move |app, event| {

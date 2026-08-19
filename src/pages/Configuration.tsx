@@ -323,9 +323,29 @@ export default function Configuration() {
                 </div>
               </>
             ) : (
-              <p className="text-sm text-surface-500">
-                Kafka n'est pas configuré. Le pipeline fonctionne en mode base de données locale.
-              </p>
+              <div className="space-y-3">
+                <p className="text-sm text-surface-500">
+                  Kafka n'est pas configuré. Le pipeline fonctionne en mode base de données locale.
+                </p>
+                <button
+                  type="button"
+                  className="btn-ghost text-xs"
+                  onClick={() => setSettings({
+                    ...settings,
+                    kafka: {
+                      brokers: ["localhost:9092"],
+                      input_topic: "defudolog-logs",
+                      output_topic: "defudolog-alerts",
+                      group_id: "defudolog-consumer",
+                      sasl_username: null,
+                      sasl_password: null,
+                    } as KafkaSettings,
+                  })}
+                >
+                  <Server size={14} />
+                  Activer le connecteur Kafka
+                </button>
+              </div>
             )}
           </div>
 

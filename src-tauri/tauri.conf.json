@@ -9,6 +9,11 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
+    "withGlobalTauri": true,
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": false
+    },
     "windows": [
       {
         "title": "DeFuDoLog — Data Leak Detection",
