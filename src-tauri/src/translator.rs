@@ -90,7 +90,7 @@ impl LogTranslator {
         {
             let cache = self.cache.read();
             for (pattern, (format_str, level)) in cache.iter() {
-                if lower_tpl.contains(pattern) || lower_raw.contains(pattern) {
+                if Self::matches_pattern(&lower_raw, &lower_tpl, pattern) {
                     let meaning = Self::interpolate(format_str, params, clean_raw);
                     return TranslatedLog {
                         meaning,
@@ -105,7 +105,7 @@ impl LogTranslator {
         {
             let rules = self.file_rules.read();
             for rule in rules.iter() {
-                if lower_tpl.contains(&rule.pattern.to_lowercase()) || lower_raw.contains(&rule.pattern.to_lowercase()) {
+                if Self::matches_pattern(&lower_raw, &lower_tpl, &rule.pattern.to_lowercase()) {
                     let meaning = Self::interpolate(&rule.template_format, params, clean_raw);
                     return TranslatedLog {
                         meaning,
@@ -123,6 +123,20 @@ impl LogTranslator {
             status_level: level,
             is_learned: false,
         }
+    }
+
+    /// Vérifie la correspondance d'un motif sur le log brut ou le template avec tolérance aux séparateurs
+    fn matches_pattern(raw_lower: &str, tpl_lower: &str, pattern_lower: &str) -> bool {
+        if raw_lower.contains(pattern_lower) || tpl_lower.contains(pattern_lower) {
+            return true;
+        }
+
+        // Normalisation des séparateurs pour matcher "eventid=4625" avec "eventid: 4625" ou "eventid 4625"
+        let norm_raw = raw_lower.replace(['=', ':', '_', '-'], " ");
+        let norm_tpl = tpl_lower.replace(['=', ':', '_', '-'], " ");
+        let norm_pat = pattern_lower.replace(['=', ':', '_', '-'], " ");
+
+        norm_raw.contains(&norm_pat) || norm_tpl.contains(&norm_pat)
     }
 
     /// Interpolation des variables {0}, {1}, {2}... ou extraction intelligente

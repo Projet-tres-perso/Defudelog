@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
@@ -7,7 +7,7 @@ import {
   AlertTriangle, ScrollText, Radio, Activity,
   ShieldAlert, KeyRound, Cpu, Lock, Play, Pause,
   RefreshCw, Terminal, Globe, ShieldCheck, ShieldAlert as ShieldIcon,
-  Zap, ExternalLink
+  Zap, ExternalLink, ChevronLeft, ChevronRight
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -19,7 +19,12 @@ export default function Dashboard() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [monitoringLoading, setMonitoringLoading] = useState(false);
   const [logFilter, setLogFilter] = useState<"all" | "local" | "network">("all");
+  const [isLivePaused, setIsLivePaused] = useState(false);
+  const [logsPage, setLogsPage] = useState(1);
+  const [logsTotal, setLogsTotal] = useState(0);
+  const logsPerPage = 10;
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const pendingLogsRef = useRef<RawLog[]>([]);
 
   const checkAdminStatus = async () => {
     try {
@@ -39,6 +44,19 @@ export default function Dashboard() {
     }
   };
 
+  const fetchPageLogs = async (targetPage: number) => {
+    try {
+      const logsRes = await invoke<{ logs: RawLog[]; total: number }>("get_raw_logs", {
+        limit: logsPerPage,
+        offset: (targetPage - 1) * logsPerPage,
+      });
+      setRecentLogs(logsRes?.logs || []);
+      setLogsTotal(logsRes?.total || 0);
+    } catch (e) {
+      console.error("Erreur fetchPageLogs:", e);
+    }
+  };
+
   const fetchAllData = async () => {
     try {
       const s = await invoke<DashboardStats>("get_dashboard_stats");
@@ -50,8 +68,12 @@ export default function Dashboard() {
       const alertsRes = await invoke<{ alerts: Alert[] }>("get_alerts", { level: null, page: 1, perPage: 6 });
       setRecentAlerts(alertsRes.alerts || []);
 
-      const logsRes = await invoke<{ logs: RawLog[]; total: number }>("get_raw_logs", { limit: 12, offset: 0 });
-      setRecentLogs(logsRes?.logs || []);
+      // Si nous sommes sur la page 1 et en mode direct, on met à jour les logs récents
+      if (logsPage === 1 && !isLivePaused) {
+        const logsRes = await invoke<{ logs: RawLog[]; total: number }>("get_raw_logs", { limit: logsPerPage, offset: 0 });
+        setRecentLogs(logsRes?.logs || []);
+        setLogsTotal(logsRes?.total || 0);
+      }
 
       const monStatus = await invoke<{ monitoring: boolean }>("get_monitoring_status");
       setIsMonitoring(monStatus?.monitoring ?? false);
@@ -62,28 +84,57 @@ export default function Dashboard() {
     }
   };
 
+  const handlePageChange = async (newPage: number) => {
+    setLogsPage(newPage);
+    if (newPage > 1) {
+      // Auto-freeze : fige automatiquement le défilement dès qu'on feuillette les pages
+      setIsLivePaused(true);
+      await fetchPageLogs(newPage);
+    } else {
+      // Revenir à la première page
+      await fetchPageLogs(1);
+    }
+  };
+
+  const resumeLiveStream = async () => {
+    setLogsPage(1);
+    setIsLivePaused(false);
+    await fetchPageLogs(1);
+  };
+
   useEffect(() => {
     checkAdminStatus();
     fetchAllData();
 
     // Polling régulier de sécurité
-    const interval = setInterval(fetchAllData, 2500);
+    const interval = setInterval(fetchAllData, 3000);
 
-    // Écoute réactive en direct des nouveaux logs ingérés par le backend
+    // Écoute réactive en arrière-plan avec BUFFERING / BATCHING
     let unlistenFn: (() => void) | undefined;
     listen<RawLog>("log-ingested", (event) => {
       if (event.payload) {
-        setRecentLogs((prev) => [event.payload, ...prev.slice(0, 11)]);
+        pendingLogsRef.current.push(event.payload);
       }
     }).then((unlisten) => {
       unlistenFn = unlisten;
     }).catch((e) => console.warn("Erreur listen log-ingested:", e));
 
+    // Flush régulé du buffer toutes les 350ms (uniquement si en direct et sur la page 1)
+    const flushInterval = setInterval(() => {
+      if (pendingLogsRef.current.length > 0 && !isLivePaused && logsPage === 1) {
+        const batch = [...pendingLogsRef.current];
+        pendingLogsRef.current = [];
+        setRecentLogs((prev) => [...batch.reverse(), ...prev].slice(0, logsPerPage));
+        setLogsTotal((prev) => prev + batch.length);
+      }
+    }, 350);
+
     return () => {
       clearInterval(interval);
+      clearInterval(flushInterval);
       if (unlistenFn) unlistenFn();
     };
-  }, []);
+  }, [isLivePaused, logsPage]);
 
   const toggleMonitoring = async () => {
     setMonitoringLoading(true);
@@ -103,23 +154,26 @@ export default function Dashboard() {
     }
   };
 
-  // Détection de source réseau / IP
   const isNetworkLog = (log: RawLog) => {
     const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(log.hostname) && log.hostname !== "127.0.0.1";
     return log.source_id.startsWith("network_") || isIp;
   };
 
-  const filteredLogs = recentLogs.filter((l) => {
-    if (logFilter === "all") return true;
-    if (logFilter === "network") return isNetworkLog(l);
-    if (logFilter === "local") return !isNetworkLog(l);
-    return true;
-  });
+  const filteredLogs = useMemo(() => {
+    return recentLogs.filter((l) => {
+      if (logFilter === "all") return true;
+      if (logFilter === "network") return isNetworkLog(l);
+      if (logFilter === "local") return !isNetworkLog(l);
+      return true;
+    });
+  }, [recentLogs, logFilter]);
 
-  const categoryCounts = recentAlerts.reduce((acc, a) => {
-    acc[a.category] = (acc[a.category] || 0) + 1;
-    return acc;
-  }, {} as Record<AlertCategory, number>);
+  const categoryCounts = useMemo(() => {
+    return recentAlerts.reduce((acc, a) => {
+      acc[a.category] = (acc[a.category] || 0) + 1;
+      return acc;
+    }, {} as Record<AlertCategory, number>);
+  }, [recentAlerts]);
 
   const statCards = [
     { label: "Logs (24h)", value: stats?.logs_last_24h ?? 0, icon: ScrollText, color: "text-blue-400", bg: "bg-blue-500/10" },
@@ -352,32 +406,56 @@ export default function Dashboard() {
 
         {/* Live Raw Logs Ingestion with Filter */}
         <div className="card space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold text-sm flex items-center gap-2">
               <Terminal size={16} className="text-primary-400" />
-              Flux des Logs Ingestés en Direct
+              <span>Flux des Logs Ingestés en Direct</span>
+              {isLivePaused ? (
+                <span className="badge bg-amber-500/20 text-amber-300 text-3xs border border-amber-500/30">
+                  Défilement Figé (Pause)
+                </span>
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Flux temps réel actif" />
+              )}
             </h3>
             
-            {/* Filter buttons */}
-            <div className="flex items-center gap-1 bg-surface-900 p-0.5 rounded-lg border border-surface-800 text-2xs">
+            <div className="flex items-center gap-2">
+              {/* Pause / Resume Button */}
               <button
-                onClick={() => setLogFilter("all")}
-                className={`px-2 py-1 rounded transition-colors ${logFilter === "all" ? "bg-surface-700 text-white font-medium" : "text-surface-400 hover:text-surface-200"}`}
+                type="button"
+                onClick={() => setIsLivePaused(!isLivePaused)}
+                className={`text-2xs px-2.5 py-1 rounded-lg border flex items-center gap-1 font-medium transition-all ${
+                  isLivePaused
+                    ? "bg-amber-900/60 border-amber-600/60 text-amber-200 hover:bg-amber-800/80"
+                    : "bg-surface-800 border-surface-700 text-surface-300 hover:text-white"
+                }`}
+                title={isLivePaused ? "Reprendre le défilement temps réel" : "Figer le flux pour lire tranquillement"}
               >
-                Tous ({recentLogs.length})
+                {isLivePaused ? <Play size={11} className="fill-current" /> : <Pause size={11} />}
+                <span>{isLivePaused ? "Reprendre" : "Pause"}</span>
               </button>
-              <button
-                onClick={() => setLogFilter("local")}
-                className={`px-2 py-1 rounded transition-colors ${logFilter === "local" ? "bg-purple-900/60 text-purple-200 font-medium" : "text-surface-400 hover:text-surface-200"}`}
-              >
-                💻 Locaux
-              </button>
-              <button
-                onClick={() => setLogFilter("network")}
-                className={`px-2 py-1 rounded transition-colors ${logFilter === "network" ? "bg-cyan-900/60 text-cyan-200 font-medium" : "text-surface-400 hover:text-surface-200"}`}
-              >
-                🌐 Réseau (IP)
-              </button>
+
+              {/* Filter buttons */}
+              <div className="flex items-center gap-1 bg-surface-900 p-0.5 rounded-lg border border-surface-800 text-2xs">
+                <button
+                  onClick={() => setLogFilter("all")}
+                  className={`px-2 py-1 rounded transition-colors ${logFilter === "all" ? "bg-surface-700 text-white font-medium" : "text-surface-400 hover:text-surface-200"}`}
+                >
+                  Tous ({recentLogs.length})
+                </button>
+                <button
+                  onClick={() => setLogFilter("local")}
+                  className={`px-2 py-1 rounded transition-colors ${logFilter === "local" ? "bg-purple-900/60 text-purple-200 font-medium" : "text-surface-400 hover:text-surface-200"}`}
+                >
+                  💻 Locaux
+                </button>
+                <button
+                  onClick={() => setLogFilter("network")}
+                  className={`px-2 py-1 rounded transition-colors ${logFilter === "network" ? "bg-cyan-900/60 text-cyan-200 font-medium" : "text-surface-400 hover:text-surface-200"}`}
+                >
+                  🌐 Réseau (IP)
+                </button>
+              </div>
             </div>
           </div>
 
@@ -387,7 +465,7 @@ export default function Dashboard() {
                 {recentLogs.length === 0 ? "En attente d'ingestion de logs..." : "Aucun log correspondant au filtre."}
               </div>
             ) : (
-              filteredLogs.map((l) => {
+              filteredLogs.map((l: RawLog) => {
                 const isNet = isNetworkLog(l);
                 const meaning = l.meaning || l.raw_message;
                 return (
@@ -417,6 +495,57 @@ export default function Dashboard() {
                 );
               })
             )}
+          </div>
+
+          {/* Smart Pagination Bar with Auto-Freeze Controls */}
+          <div className="p-3 border-t border-surface-800/80 rounded-b-xl flex flex-wrap items-center justify-between gap-3 text-xs bg-surface-900/60">
+            {/* Left Status indicator */}
+            <div className="flex items-center gap-2">
+              {logsPage === 1 && !isLivePaused ? (
+                <div className="flex items-center gap-1.5 text-emerald-400 font-medium text-2xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span>Flux direct actif (Page 1)</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={resumeLiveStream}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30 text-2xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                  title="Revenir immédiatement au direct et réactiver le flux temps réel"
+                >
+                  <Play size={11} className="fill-current text-emerald-400" />
+                  <span>Reprendre le Direct</span>
+                </button>
+              )}
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="flex items-center gap-3">
+              <span className="text-2xs text-surface-400 font-mono">
+                Page {logsPage} sur {Math.max(1, Math.ceil(logsTotal / logsPerPage))} {logsTotal > 0 && `(${logsTotal.toLocaleString()} logs)`}
+              </span>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(Math.max(1, logsPage - 1))}
+                  disabled={logsPage === 1}
+                  className="btn-ghost p-1 disabled:opacity-30 text-surface-300 hover:text-white"
+                  title="Page précédente (Fige automatiquement le flux)"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(logsPage + 1)}
+                  disabled={logsPage >= Math.ceil(logsTotal / logsPerPage)}
+                  className="btn-ghost p-1 disabled:opacity-30 text-surface-300 hover:text-white"
+                  title="Page suivante (Fige automatiquement le flux)"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

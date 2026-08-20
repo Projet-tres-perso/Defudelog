@@ -133,7 +133,7 @@ impl LogParser {
         let params: Vec<String> = tokens.iter()
             .filter_map(|t| match t {
                 TokenKind::Literal(_) => None,
-                TokenKind::Param(p) => Some(p.clone()),
+                TokenKind::Param { raw_value, .. } => Some(raw_value.clone()),
             })
             .collect();
 
@@ -169,7 +169,11 @@ impl LogParser {
                     if start > 0 {
                         result.push(TokenKind::Literal(remaining[..start].to_string()));
                     }
-                    result.push(TokenKind::Param(replacement.to_string()));
+                    let raw_val = remaining[start..end].to_string();
+                    result.push(TokenKind::Param {
+                        placeholder: replacement.to_string(),
+                        raw_value: raw_val,
+                    });
                     remaining = remaining[end..].to_string();
                 }
                 None => {
@@ -197,7 +201,7 @@ impl LogParser {
         tokens.iter()
             .map(|t| match t {
                 TokenKind::Literal(s) => s.as_str(),
-                TokenKind::Param(p) => p.as_str(),
+                TokenKind::Param { placeholder, .. } => placeholder.as_str(),
             })
             .collect::<Vec<_>>()
             .join("")
@@ -259,7 +263,10 @@ impl LogParser {
 #[derive(Debug, Clone, PartialEq)]
 enum TokenKind {
     Literal(String),
-    Param(String),
+    Param {
+        placeholder: String,
+        raw_value: String,
+    },
 }
 
 // ============================================================================
