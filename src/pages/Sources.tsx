@@ -443,24 +443,45 @@ export default function Sources() {
                     <OsIcon size={20} className={src.enabled ? "text-emerald-400" : "text-surface-500"} />
                   </div>
                   <div>
-                    <p className="font-medium text-sm">{src.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-sm">{src.name}</p>
+                      {src.priority === "critical" && (
+                        <span className="text-3xs bg-red-500/20 text-red-400 font-bold px-2 py-0.5 rounded border border-red-500/30 flex items-center gap-1">
+                          🔴 Priorité Critique
+                        </span>
+                      )}
+                      {src.priority === "high" && (
+                        <span className="text-3xs bg-amber-500/20 text-amber-400 font-bold px-2 py-0.5 rounded border border-amber-500/30 flex items-center gap-1">
+                          🟠 Priorité Haute
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-surface-500">
                       {src.hostname} · {formatSourceType(src.source_type)} · {src.os}
                     </p>
                   </div>
                 </div>
                 
-                {src.enabled && (
-                  <div className="hidden md:block w-32 h-8 mr-4 opacity-70" title="Activité (Simulée)">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={generateSparklineData()}>
-                        <Line type="monotone" dataKey="value" stroke="#34d399" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-                
-                <div className="flex items-center gap-2">
+                {/* Priority & Status Controls */}
+                <div className="flex items-center gap-3">
+                  <select
+                    value={src.priority || "normal"}
+                    onChange={async (e) => {
+                      try {
+                        await invoke("update_log_source_priority", { id: src.id, priority: e.target.value });
+                        await fetchSources();
+                      } catch (err) {
+                        console.error("Erreur update_log_source_priority:", err);
+                      }
+                    }}
+                    className="bg-surface-800 border border-surface-700 text-surface-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer"
+                    title="Définir le niveau de priorité de surveillance pour cette machine"
+                  >
+                    <option value="normal">Priorité Normale</option>
+                    <option value="high">Priorité Haute 🟠</option>
+                    <option value="critical">Priorité Critique 🔴</option>
+                  </select>
+
                   {src.enabled ? (
                     <span className="badge-benign text-2xs">Actif</span>
                   ) : (

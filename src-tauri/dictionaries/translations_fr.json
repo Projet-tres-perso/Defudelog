@@ -1,0 +1,905 @@
+[
+  {
+    "category": "SSH & Authentification Linux",
+    "pattern": "accepted password for",
+    "template_format": "🟢 Connexion SSH réussie par mot de passe pour l'utilisateur '{user}' depuis l'adresse IP {ip} (port {port}).",
+    "status_level": "success"
+  },
+  {
+    "category": "SSH & Authentification Linux",
+    "pattern": "accepted publickey for",
+    "template_format": "🟢 Connexion SSH réussie par clé cryptographique pour l'utilisateur '{user}' depuis l'IP {ip}.",
+    "status_level": "success"
+  },
+  {
+    "category": "SSH & Authentification Linux",
+    "pattern": "failed password for invalid user",
+    "template_format": "🔴 Alerte Intrusion : Tentative de connexion SSH avec mot de passe incorrect sur un compte inexistant '{user}' depuis l'IP suspecte {ip}.",
+    "status_level": "error"
+  },
+  {
+    "category": "SSH & Authentification Linux",
+    "pattern": "failed password for",
+    "template_format": "🔴 Échec d'authentification SSH : Mot de passe invalide saisi pour le compte '{user}' depuis l'IP {ip}.",
+    "status_level": "error"
+  },
+  {
+    "category": "Sessions & Système",
+    "pattern": "session opened for user",
+    "template_format": "ℹ️ Ouverture d'une session système pour le compte '{user}'.",
+    "status_level": "info"
+  },
+  {
+    "category": "Sessions & Système",
+    "pattern": "session closed for user",
+    "template_format": "ℹ️ Déconnexion et fermeture de session pour l'utilisateur '{user}'.",
+    "status_level": "info"
+  },
+  {
+    "category": "Réseau Distant",
+    "pattern": "connection closed by",
+    "template_format": "ℹ️ La connexion réseau distante a été fermée par l'hôte {ip}.",
+    "status_level": "info"
+  },
+  {
+    "category": "Réseau Distant",
+    "pattern": "disconnected from",
+    "template_format": "ℹ️ Déconnexion normale de l'hôte distant {ip}.",
+    "status_level": "info"
+  },
+  {
+    "category": "Élévation de Privilèges",
+    "pattern": "command=",
+    "template_format": "⚠️ Élévation de privilèges (sudo) : L'utilisateur '{user}' a exécuté la commande avec droits administrateur : '{cmd}'.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Authentification & PAM",
+    "pattern": "authentication failure",
+    "template_format": "🔴 Échec de vérification des droits PAM / Sudo : Mot de passe administrateur incorrect saisi par '{user}'.",
+    "status_level": "error"
+  },
+  {
+    "category": "Sécurité Système",
+    "pattern": "not in sudoers file",
+    "template_format": "🔴 Tentative d'accès non autorisé : L'utilisateur '{user}' a tenté d'utiliser la commande sudo sans en avoir les droits.",
+    "status_level": "error"
+  },
+
+  {
+    "category": "Windows - Authentification & Sessions",
+    "pattern": "eventid=4624",
+    "template_format": "🟢 Connexion Windows validée (EventID 4624) pour l'utilisateur '{user}' sur la session active.",
+    "status_level": "success"
+  },
+  {
+    "category": "Windows - Authentification & Sessions",
+    "pattern": "eventid=4625",
+    "template_format": "🔴 Échec de connexion Windows (EventID 4625) : Identifiant ou mot de passe incorrect pour le compte '{user}'.",
+    "status_level": "error"
+  },
+  {
+    "category": "Windows - Authentification & Sessions",
+    "pattern": "eventid=4634",
+    "template_format": "ℹ️ Fermeture normale de session Windows (EventID 4634) pour le compte '{user}'.",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Authentification & Sessions",
+    "pattern": "eventid=4647",
+    "template_format": "ℹ️ Déconnexion initiée manuellement par l'utilisateur (EventID 4647) sur le compte '{user}'.",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Authentification & Sessions",
+    "pattern": "eventid=4648",
+    "template_format": "⚠️ Connexion avec identifiants explicites (EventID 4648) : L'utilisateur '{user}' a ouvert une session avec d'autres identifiants (RunAs / Vol potentiel).",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Authentification & Sessions",
+    "pattern": "eventid=4672",
+    "template_format": "⚠️ Attribution de privilèges super-administrateur (EventID 4672) pour le compte '{user}' (SeDebugPrivilege / SeTcbPrivilege).",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Authentification & Sessions",
+    "pattern": "eventid=4776",
+    "template_format": "ℹ️ Validation d'informations d'identification NTLM (EventID 4776) pour le compte '{user}'.",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Authentification Kerberos",
+    "pattern": "eventid=4768",
+    "template_format": "ℹ️ Demande de ticket d'authentification Kerberos TGT (EventID 4768) émise pour le compte '{user}'.",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Authentification Kerberos",
+    "pattern": "eventid=4769",
+    "template_format": "ℹ️ Demande de ticket de service Kerberos TGS (EventID 4769) émise pour le compte '{user}' (Surveiller Kerberoasting potentiel).",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Authentification Kerberos",
+    "pattern": "eventid=4771",
+    "template_format": "🔴 Échec de pré-authentification Kerberos (EventID 4771) pour '{user}' : Mot de passe erroné ou tentative d'attaque AS-REP Roasting.",
+    "status_level": "error"
+  },
+
+  {
+    "category": "Windows - Gestion des Utilisateurs",
+    "pattern": "eventid=4720",
+    "template_format": "⚠️ Création de compte d'utilisateur Windows (EventID 4720) : Un nouveau compte a été créé par l'administrateur.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Gestion des Utilisateurs",
+    "pattern": "eventid=4722",
+    "template_format": "ℹ️ Activation d'un compte utilisateur (EventID 4722) précédemment suspendu ou désactivé.",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Gestion des Utilisateurs",
+    "pattern": "eventid=4723",
+    "template_format": "ℹ️ Tentative de modification de mot de passe effectuée directement par l'utilisateur (EventID 4723).",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Gestion des Utilisateurs",
+    "pattern": "eventid=4724",
+    "template_format": "⚠️ Réinitialisation de mot de passe administrateur (EventID 4724) effectuée pour le compte '{user}'.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Gestion des Utilisateurs",
+    "pattern": "eventid=4725",
+    "template_format": "⚠️ Compte utilisateur désactivé (EventID 4725) par un administrateur.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Gestion des Utilisateurs",
+    "pattern": "eventid=4726",
+    "template_format": "🔴 Suppression d'un compte utilisateur (EventID 4726) de la base locale ou Active Directory.",
+    "status_level": "error"
+  },
+  {
+    "category": "Windows - Gestion des Utilisateurs",
+    "pattern": "eventid=4738",
+    "template_format": "⚠️ Modification des propriétés ou attributs d'un compte utilisateur (EventID 4738).",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Gestion des Utilisateurs",
+    "pattern": "eventid=4740",
+    "template_format": "🔴 Compte utilisateur verrouillé (EventID 4740) suite à un nombre excessif de tentatives erronées (Attaque Brute-Force potentielle).",
+    "status_level": "error"
+  },
+  {
+    "category": "Windows - Gestion des Utilisateurs",
+    "pattern": "eventid=4767",
+    "template_format": "🟢 Compte utilisateur déverrouillé (EventID 4767) par l'administrateur système.",
+    "status_level": "success"
+  },
+
+  {
+    "category": "Windows - Groupes & Privilèges",
+    "pattern": "eventid=4728",
+    "template_format": "⚠️ Sécurité : Un membre a été ajouté à un groupe de sécurité global Active Directory (EventID 4728).",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Groupes & Privilèges",
+    "pattern": "eventid=4729",
+    "template_format": "ℹ️ Un membre a été retiré d'un groupe de sécurité global (EventID 4729).",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Groupes & Privilèges",
+    "pattern": "eventid=4732",
+    "template_format": "⚠️ Élévation de groupe local (EventID 4732) : Un utilisateur a été ajouté au groupe Administrateurs Locaux de la machine.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Groupes & Privilèges",
+    "pattern": "eventid=4733",
+    "template_format": "ℹ️ Un membre a été retiré d'un groupe local de sécurité (EventID 4733).",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Groupes & Privilèges",
+    "pattern": "eventid=4756",
+    "template_format": "🚨 Alerte Privilèges : Un membre a été ajouté à un groupe universel critique (ex: Domain Admins, Enterprise Admins) (EventID 4756).",
+    "status_level": "error"
+  },
+  {
+    "category": "Windows - Groupes & Privilèges",
+    "pattern": "eventid=4757",
+    "template_format": "ℹ️ Un membre a été retiré d'un groupe universel critique (EventID 4757).",
+    "status_level": "info"
+  },
+
+  {
+    "category": "Windows - Exécution & Processus",
+    "pattern": "eventid=4688",
+    "template_format": "ℹ️ Exécution de processus Windows (EventID 4688) : Nouveau programme lancé sur le système.",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Exécution & Processus",
+    "pattern": "eventid=4689",
+    "template_format": "ℹ️ Arrêt normal d'un processus Windows (EventID 4689).",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Services & Persistance",
+    "pattern": "eventid=7045",
+    "template_format": "⚠️ Nouveau service système installé (EventID 7045) : Un pilote ou service d'arrière-plan a été configuré (Vérifier persistance).",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Services & Persistance",
+    "pattern": "eventid=4697",
+    "template_format": "⚠️ Tentative d'installation d'un service système (EventID 4697) détectée dans le journal d'audit de sécurité.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Services & Persistance",
+    "pattern": "eventid=7036",
+    "template_format": "ℹ️ Changement d'état d'un service Windows (EventID 7036) : Le service a démarré ou s'est arrêté.",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Tâches Planifiées",
+    "pattern": "eventid=4698",
+    "template_format": "⚠️ Création d'une tâche planifiée (EventID 4698) : Une exécution automatique a été configurée dans le Planificateur de tâches.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Tâches Planifiées",
+    "pattern": "eventid=4699",
+    "template_format": "ℹ️ Suppression d'une tâche planifiée (EventID 4699) du Planificateur de tâches Windows.",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Tâches Planifiées",
+    "pattern": "eventid=4702",
+    "template_format": "⚠️ Modification d'une tâche planifiée existante (EventID 4702) : Actions ou déclencheurs altérés.",
+    "status_level": "warning"
+  },
+
+  {
+    "category": "Windows - PowerShell & Scripts d'Attaque",
+    "pattern": "eventid=4104",
+    "template_format": "⚠️ Exécution de script PowerShell (EventID 4104 - ScriptBlock Logging) : Bloc de commandes PowerShell exécuté.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - PowerShell & Scripts d'Attaque",
+    "pattern": "eventid=4103",
+    "template_format": "ℹ️ Exécution de pipeline de module PowerShell (EventID 4103) consigné.",
+    "status_level": "info"
+  },
+
+  {
+    "category": "Windows - Audit & Falsification de Journaux",
+    "pattern": "eventid=1102",
+    "template_format": "🚨 Alerte Critique d'Évasion : Le journal d'audit de sécurité Windows a été effacé manuellement (EventID 1102).",
+    "status_level": "error"
+  },
+  {
+    "category": "Windows - Audit & Falsification de Journaux",
+    "pattern": "eventid=104",
+    "template_format": "🚨 Alerte Évasion : Le journal Système Windows (System Log) a été vidé et effacé (EventID 104).",
+    "status_level": "error"
+  },
+  {
+    "category": "Windows - Audit & Falsification de Journaux",
+    "pattern": "eventid=1100",
+    "template_format": "🚨 Alerte Évasion : Le service de journalisation d'événements Windows s'est arrêté de manière anormale (EventID 1100).",
+    "status_level": "error"
+  },
+  {
+    "category": "Windows - Audit & Falsification de Journaux",
+    "pattern": "eventid=4719",
+    "template_format": "🚨 Modification de la stratégie d'audit système (EventID 4719) : Des règles d'audit de sécurité ont été désactivées.",
+    "status_level": "error"
+  },
+
+  {
+    "category": "Windows - Partages Réseau & Objets SMB",
+    "pattern": "eventid=5140",
+    "template_format": "ℹ️ Accès à un partage réseau Windows / SMB (EventID 5140) par l'utilisateur '{user}'.",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Partages Réseau & Objets SMB",
+    "pattern": "eventid=5145",
+    "template_format": "⚠️ Vérification d'objet partagé sur le réseau (EventID 5145) : Accès aux partages administratifs (C$, ADMIN$).",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Objets & Fichiers",
+    "pattern": "eventid=4663",
+    "template_format": "ℹ️ Tentative d'accès à un objet ou fichier sensible (EventID 4663) par l'utilisateur '{user}'.",
+    "status_level": "info"
+  },
+
+  {
+    "category": "Windows - Pare-feu & Filtrage WFP",
+    "pattern": "eventid=5156",
+    "template_format": "ℹ️ Pare-feu Windows (WFP EventID 5156) : Connexion réseau sortante autorisée pour une application.",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Pare-feu & Filtrage WFP",
+    "pattern": "eventid=5157",
+    "template_format": "🛡️ Pare-feu Windows (WFP EventID 5157) : Connexion réseau bloquée ou paquet rejeté.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Pare-feu & Filtrage WFP",
+    "pattern": "eventid=2004",
+    "template_format": "⚠️ Règle ajoutée dans le Pare-feu Windows Defender (EventID 2004) pour autoriser un port ou une application.",
+    "status_level": "warning"
+  },
+
+  {
+    "category": "Windows - Antivirus & Defender",
+    "pattern": "eventid=1116",
+    "template_format": "🚨 Alerte Antivirus : Windows Defender a détecté un logiciel malveillant ou spyware (EventID 1116).",
+    "status_level": "error"
+  },
+  {
+    "category": "Windows - Antivirus & Defender",
+    "pattern": "eventid=1117",
+    "template_format": "🟢 Windows Defender a neutralisé avec succès la menace et mis le fichier en quarantaine (EventID 1117).",
+    "status_level": "success"
+  },
+  {
+    "category": "Windows - Antivirus & Defender",
+    "pattern": "eventid=5001",
+    "template_format": "🚨 Alerte Sécurité : La protection en temps réel de Windows Defender a été désactivée (EventID 5001).",
+    "status_level": "error"
+  },
+  {
+    "category": "Windows - Antivirus & Defender",
+    "pattern": "eventid=5007",
+    "template_format": "⚠️ La configuration de Windows Defender a été modifiée (EventID 5007).",
+    "status_level": "warning"
+  },
+
+  {
+    "category": "Windows - Intégrité Système & Démarrage",
+    "pattern": "eventid=6005",
+    "template_format": "🟢 Le service de journalisation d'événements a démarré (Démarrage du système / Boot) (EventID 6005).",
+    "status_level": "success"
+  },
+  {
+    "category": "Windows - Intégrité Système & Démarrage",
+    "pattern": "eventid=6006",
+    "template_format": "ℹ️ Arrêt normal et propre du système d'exploitation Windows (EventID 6006).",
+    "status_level": "info"
+  },
+  {
+    "category": "Windows - Intégrité Système & Démarrage",
+    "pattern": "eventid=6008",
+    "template_format": "🔴 Arrêt inattendu du système (EventID 6008) : La machine a été éteinte de force ou a subi une coupure de courant.",
+    "status_level": "error"
+  },
+  {
+    "category": "Windows - Intégrité Système & Démarrage",
+    "pattern": "eventid=41",
+    "template_format": "🚨 Crash Critique Système (Kernel-Power EventID 41) : Le système a redémarré sans s'arrêter proprement au préalable.",
+    "status_level": "error"
+  },
+  {
+    "category": "Windows - Intégrité Système & Démarrage",
+    "pattern": "eventid=1001",
+    "template_format": "🚨 Écran Bleu de la Mort (BSOD / BugCheck EventID 1001) consigné avec vidage sur incident (Crash Dump).",
+    "status_level": "error"
+  },
+
+  {
+    "category": "Pare-feu & Réseau Linux",
+    "pattern": "ufw block",
+    "template_format": "🛡️ Pare-feu UFW : Connexion bloquée depuis l'adresse IP {ip} vers le port {port}.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Pare-feu & Réseau Linux",
+    "pattern": "iptables denied",
+    "template_format": "🛡️ Pare-feu Iptables : Paquet réseau rejeté en provenance de {ip}.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Pare-feu & Réseau Linux",
+    "pattern": "dhcpoffer",
+    "template_format": "ℹ️ Réseau Local : Le serveur DHCP a attribué l'adresse IP {ip} à un équipement du réseau.",
+    "status_level": "info"
+  },
+
+  {
+    "category": "Défaillances Système Linux",
+    "pattern": "out of memory",
+    "template_format": "🔴 Alerte Mémoire Saturée : Le système a épuisé sa mémoire vive (RAM) et a dû stopper un processus.",
+    "status_level": "error"
+  },
+  {
+    "category": "Défaillances Système Linux",
+    "pattern": "kernel panic",
+    "template_format": "🚨 Arrêt d'urgence du système (Kernel Panic) suite à une défaillance critique du noyau.",
+    "status_level": "error"
+  },
+  {
+    "category": "Défaillances Système Linux",
+    "pattern": "segmentation fault",
+    "template_format": "🔴 Crash d'application (Segfault) : Un programme a tenté d'accéder à une zone mémoire non autorisée.",
+    "status_level": "error"
+  },
+
+  {
+    "category": "Fuites de Données & DLP",
+    "pattern": "mysqldump",
+    "template_format": "🚨 Alerte DLP : Exportation massive de base de données MySQL/MariaDB en cours par l'utilisateur '{user}'.",
+    "status_level": "error"
+  },
+  {
+    "category": "Fuites de Données & DLP",
+    "pattern": "pg_dump",
+    "template_format": "🚨 Alerte DLP : Extraction de base de données PostgreSQL vers un fichier externe.",
+    "status_level": "error"
+  },
+  {
+    "category": "Fuites de Données & DLP",
+    "pattern": "s3 cp",
+    "template_format": "🚨 Alerte DLP : Téléversement de fichiers locaux vers un espace de stockage Cloud (Amazon S3).",
+    "status_level": "error"
+  },
+
+  {
+    "category": "Conteneurs & Cloud",
+    "pattern": "container started",
+    "template_format": "ℹ️ Déploiement : Un nouveau conteneur applicatif Docker a démarré.",
+    "status_level": "info"
+  },
+  {
+    "category": "Conteneurs & Cloud",
+    "pattern": "container died",
+    "template_format": "⚠️ Arrêt imprévu ou fin d'exécution d'un conteneur Docker.",
+    "status_level": "warning"
+  },
+
+  {
+    "category": "macOS - Authentification & Sessions",
+    "pattern": "loginwindow: login",
+    "template_format": "🟢 Ouverture de session graphique macOS (loginwindow) réussie pour l'utilisateur '{user}'.",
+    "status_level": "success"
+  },
+  {
+    "category": "macOS - Authentification & Sessions",
+    "pattern": "loginwindow: authentication failed",
+    "template_format": "🔴 Échec de déverrouillage de session macOS : Mot de passe erroné saisi pour '{user}'.",
+    "status_level": "error"
+  },
+  {
+    "category": "macOS - Authentification & Sessions",
+    "pattern": "localauthentication",
+    "template_format": "🟢 Authentification biométrique validée (Touch ID / Apple Watch) pour l'utilisateur '{user}'.",
+    "status_level": "success"
+  },
+  {
+    "category": "macOS - Authentification & Sessions",
+    "pattern": "authorizationhost",
+    "template_format": "ℹ️ Boîte de dialogue d'autorisation administrateur macOS (SecurityAgent) invoquée pour '{user}'.",
+    "status_level": "info"
+  },
+  {
+    "category": "macOS - Authentification & Sessions",
+    "pattern": "opendirectoryd",
+    "template_format": "ℹ️ Requête d'annuaire et vérification des droits OpenDirectory (opendirectoryd).",
+    "status_level": "info"
+  },
+  {
+    "category": "macOS - Authentification & Sessions",
+    "pattern": "screensaver: unlock",
+    "template_format": "🟢 Déverrouillage de l'écran de veille par l'utilisateur '{user}'.",
+    "status_level": "success"
+  },
+
+  {
+    "category": "macOS - Sécurité & Protection Apple",
+    "pattern": "syspolicyd",
+    "template_format": "🛡️ Contrôle de sécurité Apple Gatekeeper (syspolicyd) : Évaluation de signature et notarisation d'une application.",
+    "status_level": "info"
+  },
+  {
+    "category": "macOS - Sécurité & Protection Apple",
+    "pattern": "gatekeeper block",
+    "template_format": "🚨 Blocage Gatekeeper : Exécution d'un programme non certifié ou non notarisé par Apple refusée.",
+    "status_level": "error"
+  },
+  {
+    "category": "macOS - Sécurité & Protection Apple",
+    "pattern": "xprotect",
+    "template_format": "🚨 Alerte Antivirus XProtect : Signature de malware connue détectée par la protection intégrée Apple.",
+    "status_level": "error"
+  },
+  {
+    "category": "macOS - Sécurité & Protection Apple",
+    "pattern": "mrt: remediation",
+    "template_format": "🟢 Nettoyage Apple MRT (Malware Removal Tool) : Suppression d'un composant malveillant ou adware effectuée.",
+    "status_level": "success"
+  },
+  {
+    "category": "macOS - Sécurité & Protection Apple",
+    "pattern": "com.apple.quarantine",
+    "template_format": "ℹ️ Quarantaine macOS : Fichier externe téléchargé depuis Internet placé sous surveillance.",
+    "status_level": "info"
+  },
+
+  {
+    "category": "macOS - Confidentialité & Permissions TCC",
+    "pattern": "tccd: prompt",
+    "template_format": "⚠️ Demande d'autorisation de confidentialité TCC : Une application sollicite l'accès à une ressource sensible.",
+    "status_level": "warning"
+  },
+  {
+    "category": "macOS - Confidentialité & Permissions TCC",
+    "pattern": "tccd: access denied",
+    "template_format": "🔴 Contrôle de confidentialité TCC : Accès refusé à une ressource protégée (Disque complet, Caméra, Micro).",
+    "status_level": "error"
+  },
+  {
+    "category": "macOS - Confidentialité & Permissions TCC",
+    "pattern": "ktccservicecamera",
+    "template_format": "⚠️ Confidentialité macOS : Une application tente d'accéder à la Caméra FaceTime / WebCam.",
+    "status_level": "warning"
+  },
+  {
+    "category": "macOS - Confidentialité & Permissions TCC",
+    "pattern": "ktccservicemicrophone",
+    "template_format": "⚠️ Confidentialité macOS : Une application tente d'accéder au Microphone.",
+    "status_level": "warning"
+  },
+  {
+    "category": "macOS - Confidentialité & Permissions TCC",
+    "pattern": "ktccservicescreencapture",
+    "template_format": "⚠️ Confidentialité macOS : Demande d'enregistrement ou capture d'écran par une application.",
+    "status_level": "warning"
+  },
+  {
+    "category": "macOS - Confidentialité & Permissions TCC",
+    "pattern": "ktccservicesystempolicyallfiles",
+    "template_format": "🚨 Sécurité TCC : Requête d'accès complet au disque dur (Full Disk Access) par un binaire.",
+    "status_level": "error"
+  },
+
+  {
+    "category": "macOS - Trousseau de Clés & Chiffrement",
+    "pattern": "securityd",
+    "template_format": "ℹ️ Démon de sécurité macOS (securityd) : Opération cryptographique ou accès au Trousseau de clés (Keychain).",
+    "status_level": "info"
+  },
+  {
+    "category": "macOS - Trousseau de Clés & Chiffrement",
+    "pattern": "diskmanagementd",
+    "template_format": "ℹ️ Gestion des disques et du volume APFS chiffré FileVault (diskmanagementd).",
+    "status_level": "info"
+  },
+  {
+    "category": "macOS - Trousseau de Clés & Chiffrement",
+    "pattern": "securetoken",
+    "template_format": "⚠️ Gestion des clés d'accès : Modification ou attribution d'un jeton de démarrage sécurisé (SecureToken).",
+    "status_level": "warning"
+  },
+
+  {
+    "category": "macOS - Persistance & Daemons Launchd",
+    "pattern": "launchd: loaded",
+    "template_format": "ℹ️ Démarrage de service macOS (launchd) : Un LaunchAgent ou LaunchDaemon a été activé.",
+    "status_level": "info"
+  },
+  {
+    "category": "macOS - Persistance & Daemons Launchd",
+    "pattern": "launchdaemons",
+    "template_format": "⚠️ Détection de persistance système : Fichier de configuration détecté dans /Library/LaunchDaemons.",
+    "status_level": "warning"
+  },
+  {
+    "category": "macOS - Persistance & Daemons Launchd",
+    "pattern": "launchagents",
+    "template_format": "⚠️ Détection de persistance utilisateur : Service configuré dans /Library/LaunchAgents.",
+    "status_level": "warning"
+  },
+  {
+    "category": "macOS - Persistance & Daemons Launchd",
+    "pattern": "service exited with abnormal code",
+    "template_format": "🔴 Défaillance de service (launchd) : Un démon d'arrière-plan s'est arrêté de façon anormale.",
+    "status_level": "error"
+  },
+
+  {
+    "category": "macOS - Réseau & Pare-feu",
+    "pattern": "com.apple.alf",
+    "template_format": "🛡️ Pare-feu applicatif macOS (ALF) : Connexion réseau entrante filtrée ou validée.",
+    "status_level": "info"
+  },
+  {
+    "category": "macOS - Réseau & Pare-feu",
+    "pattern": "alf: block",
+    "template_format": "🛡️ Pare-feu applicatif macOS : Connexion entrante refusée pour une application non autorisée.",
+    "status_level": "warning"
+  },
+  {
+    "category": "macOS - Réseau & Pare-feu",
+    "pattern": "sharingd: airdrop",
+    "template_format": "ℹ️ Partage de proximité Apple AirDrop (sharingd) : Transfert de document ou média initié.",
+    "status_level": "info"
+  },
+
+  {
+    "category": "macOS - Intégrité du Système & SIP",
+    "pattern": "system integrity protection",
+    "template_format": "🛡️ Protection de l'intégrité du système Apple (SIP) : Verrouillage des répertoires système protégés (/System, /usr).",
+    "status_level": "info"
+  },
+  {
+    "category": "macOS - Intégrité du Système & SIP",
+    "pattern": "csrutil: disabled",
+    "template_format": "🚨 Alerte Critique d'Intégrité : La protection du système Apple (SIP) a été désactivée dans Recovery.",
+    "status_level": "error"
+  },
+  {
+    "category": "macOS - Intégrité du Système & SIP",
+    "pattern": "sysextd",
+    "template_format": "⚠️ Extension Système macOS (sysextd) : Chargement ou validation d'une extension de sécurité (Endpoint Security).",
+    "status_level": "warning"
+  },
+
+  {
+    "category": "macOS - Logiciels & Mises à Jour",
+    "pattern": "installd",
+    "template_format": "ℹ️ Installateur de paquets macOS (installd) : Déploiement ou mise à jour d'un logiciel (.pkg).",
+    "status_level": "info"
+  },
+  {
+    "category": "macOS - Logiciels & Mises à Jour",
+    "pattern": "softwareupdated",
+    "template_format": "ℹ️ Démon de mise à jour système Apple (softwareupdated) : Recherche ou installation d'un correctif macOS.",
+    "status_level": "info"
+  },
+
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "\" 200 ",
+    "template_format": "🟢 Requête Web NGINX réussie (HTTP 200) depuis l'adresse IP {ip}.",
+    "status_level": "success"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "\" 301 ",
+    "template_format": "ℹ️ Redirection Web NGINX permanente (HTTP 301) pour le client {ip}.",
+    "status_level": "info"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "\" 400 ",
+    "template_format": "⚠️ Requête Web malformée (HTTP 400 Bad Request) reçue de l'IP {ip}.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "\" 401 ",
+    "template_format": "🔴 Tentative d'accès non authentifié (HTTP 401 Unauthorized) par le client {ip}.",
+    "status_level": "error"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "\" 403 ",
+    "template_format": "🔴 Accès NGINX interdit (HTTP 403 Forbidden) : Ressource protégée ciblée par {ip}.",
+    "status_level": "error"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "\" 404 ",
+    "template_format": "⚠️ Page ou fichier introuvable (HTTP 404 Not Found) demandé par l'IP {ip} (Scan potentiel).",
+    "status_level": "warning"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "\" 429 ",
+    "template_format": "⚠️ Dépassement de quota NGINX (HTTP 429 Too Many Requests) : Rate-Limiting activé pour l'IP {ip}.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "\" 500 ",
+    "template_format": "🔴 Erreur Interne NGINX (HTTP 500) : Une application backend (PHP/Node/Python) a crashé.",
+    "status_level": "error"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "\" 502 ",
+    "template_format": "🔴 Passerelle Défaillante NGINX (HTTP 502 Bad Gateway) : Serveur applicatif upstream injoignable ou éteint.",
+    "status_level": "error"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "\" 504 ",
+    "template_format": "🔴 Délai d'attente dépassé NGINX (HTTP 504 Gateway Timeout) : Le serveur upstream met trop de temps à répondre.",
+    "status_level": "error"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "directory index of",
+    "template_format": "🔴 Sécurité NGINX : Tentative d'exploration de répertoire interdit (Directory Listing) bloquée.",
+    "status_level": "error"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "limiting requests, excess",
+    "template_format": "🛡️ Défense NGINX : Attaque DoS ou Brute-Force ralentie par la zone de limitation de requêtes.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "ssl_do_handshake() failed",
+    "template_format": "⚠️ Échec de négociation cryptographique SSL/TLS NGINX avec le client {ip}.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Serveur Web - NGINX",
+    "pattern": "client intended to send too large body",
+    "template_format": "⚠️ Sécurité NGINX (HTTP 413) : Téléversement de fichier rejeté car supérieur à la taille maximale autorisée.",
+    "status_level": "warning"
+  },
+
+  {
+    "category": "Serveur Web - APACHE HTTPD",
+    "pattern": "ah01630: client denied by server configuration",
+    "template_format": "🔴 Sécurité Apache (AH01630) : Accès refusé au client {ip} par la configuration du serveur (.htaccess).",
+    "status_level": "error"
+  },
+  {
+    "category": "Serveur Web - APACHE HTTPD",
+    "pattern": "ah00035: access to",
+    "template_format": "🔴 Permissions Apache (AH00035) : Accès au fichier refusé en raison de droits insuffisants sur le disque.",
+    "status_level": "error"
+  },
+  {
+    "category": "Serveur Web - APACHE HTTPD",
+    "pattern": "ah01071: got error 'primary script unknown'",
+    "template_format": "⚠️ Apache PHP-FPM (AH01071) : Script PHP cible introuvable ou chemin mal configuré.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Serveur Web - APACHE HTTPD",
+    "pattern": "modsecurity: access denied",
+    "template_format": "🚨 Alerte Pare-feu WAF ModSecurity : Attaque Web (SQLi, XSS ou Traversal) interceptée et bloquée.",
+    "status_level": "error"
+  },
+  {
+    "category": "Serveur Web - APACHE HTTPD",
+    "pattern": "ah00163: apache",
+    "template_format": "🟢 Démarrage et initialisation normale du serveur Web Apache HTTPD.",
+    "status_level": "success"
+  },
+  {
+    "category": "Serveur Web - APACHE HTTPD",
+    "pattern": "ah00169: caught sigterm",
+    "template_format": "ℹ️ Arrêt ordonné du serveur Web Apache HTTPD suite à un signal système.",
+    "status_level": "info"
+  },
+
+  {
+    "category": "Base de Données - MYSQL / MARIADB",
+    "pattern": "access denied for user",
+    "template_format": "🔴 Alerte Intrusion MySQL : Échec d'authentification pour l'utilisateur '{user}' depuis l'hôte {ip}.",
+    "status_level": "error"
+  },
+  {
+    "category": "Base de Données - MYSQL / MARIADB",
+    "pattern": "connect    as user",
+    "template_format": "🟢 Connexion MySQL validée pour l'utilisateur '{user}'.",
+    "status_level": "success"
+  },
+  {
+    "category": "Base de Données - MYSQL / MARIADB",
+    "pattern": "too many connections",
+    "template_format": "🚨 Saturation MySQL (Erreur 1040) : Nombre maximal de connexions simultanées atteint (Pool saturé).",
+    "status_level": "error"
+  },
+  {
+    "category": "Base de Données - MYSQL / MARIADB",
+    "pattern": "deadlock found when trying to get lock",
+    "template_format": "⚠️ Conflit de verrouillage MySQL (Deadlock) : Deux transactions concurrentes se sont bloquées mutuellement.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Base de Données - MYSQL / MARIADB",
+    "pattern": "is marked as crashed and should be repaired",
+    "template_format": "🚨 Alerte Corruption MySQL : Table de données endommagée nécessitant une réparation immédiate.",
+    "status_level": "error"
+  },
+  {
+    "category": "Base de Données - MYSQL / MARIADB",
+    "pattern": "ready for connections",
+    "template_format": "🟢 Le serveur de base de données MySQL/MariaDB est démarré et prêt à recevoir les connexions.",
+    "status_level": "success"
+  },
+  {
+    "category": "Base de Données - MYSQL / MARIADB",
+    "pattern": "shutdown complete",
+    "template_format": "ℹ️ Arrêt complet et propre du moteur de base de données MySQL.",
+    "status_level": "info"
+  },
+
+  {
+    "category": "Base de Données - POSTGRESQL",
+    "pattern": "password authentication failed for user",
+    "template_format": "🔴 Alerte Intrusion PostgreSQL : Mot de passe erroné pour le compte de base de données '{user}'.",
+    "status_level": "error"
+  },
+  {
+    "category": "Base de Données - POSTGRESQL",
+    "pattern": "no pg_hba.conf entry for host",
+    "template_format": "🔴 Sécurité Réseau PostgreSQL : Connexion rejetée depuis {ip} car non autorisée dans pg_hba.conf.",
+    "status_level": "error"
+  },
+  {
+    "category": "Base de Données - POSTGRESQL",
+    "pattern": "connection authorized: user=",
+    "template_format": "🟢 Connexion PostgreSQL autorisée avec succès pour l'utilisateur '{user}'.",
+    "status_level": "success"
+  },
+  {
+    "category": "Base de Données - POSTGRESQL",
+    "pattern": "disconnection: session time:",
+    "template_format": "ℹ️ Déconnexion normale d'une session client PostgreSQL.",
+    "status_level": "info"
+  },
+  {
+    "category": "Base de Données - POSTGRESQL",
+    "pattern": "remaining connection slots are reserved",
+    "template_format": "🚨 Saturation PostgreSQL : Pool de connexions saturé, seuls les super-utilisateurs peuvent se connecter.",
+    "status_level": "error"
+  },
+  {
+    "category": "Base de Données - POSTGRESQL",
+    "pattern": "deadlock detected",
+    "template_format": "⚠️ Verrouillage mutuel PostgreSQL (Deadlock) : Transaction annulée suite à un conflit de ressources.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Base de Données - POSTGRESQL",
+    "pattern": "permission denied for table",
+    "template_format": "🔴 Droits insuffisants PostgreSQL : L'utilisateur '{user}' a tenté de lire ou modifier une table non autorisée.",
+    "status_level": "error"
+  },
+  {
+    "category": "Base de Données - POSTGRESQL",
+    "pattern": "database system is ready to accept connections",
+    "template_format": "🟢 Le serveur PostgreSQL est démarré et opérationnel.",
+    "status_level": "success"
+  },
+  {
+    "category": "Base de Données - POSTGRESQL",
+    "pattern": "database system was shut down at",
+    "template_format": "ℹ️ Arrêt propre de l'instance de base de données PostgreSQL.",
+    "status_level": "info"
+  },
+  {
+    "category": "Base de Données - POSTGRESQL",
+    "pattern": "checkpoint starting:",
+    "template_format": "ℹ️ Maintenance PostgreSQL : Début du point de contrôle de persistance sur disque (Checkpoint).",
+    "status_level": "info"
+  },
+  {
+    "category": "Base de Données - POSTGRESQL",
+    "pattern": "checkpoint complete:",
+    "template_format": "🟢 Maintenance PostgreSQL : Point de contrôle sur disque (Checkpoint) terminé avec succès.",
+    "status_level": "success"
+  }
+]
+

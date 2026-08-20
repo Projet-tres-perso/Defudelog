@@ -55,15 +55,21 @@ pub struct LogSource {
     pub hostname: String,
     pub os: String,
     pub enabled: bool,
+    #[serde(default = "default_priority")]
+    pub priority: String, // "normal", "high", "critical"
     pub config: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
+fn default_priority() -> String {
+    "normal".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceType {
-    FileWatcher { path: String, pattern: String },
+    FileWatcher { path: String, pattern: Option<String> },
     Journald { unit_filter: Option<String> },
     MacOsUnifiedLog { predicate: Option<String> },
     WindowsEventLog { channel: String, query: Option<String> },
@@ -109,7 +115,7 @@ impl std::fmt::Display for SourceType {
     }
 }
 
-/// Entrée de log brute
+/// Entrée de log brute avec son sens vulgarisé en français
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RawLog {
     pub id: String,
@@ -117,8 +123,21 @@ pub struct RawLog {
     pub hostname: String,
     pub raw_message: String,
     pub log_hash: String,
+    #[serde(default)]
+    pub meaning: Option<String>, // Sens métier en français
     pub timestamp: DateTime<Utc>,
     pub ingested_at: DateTime<Utc>,
+}
+
+/// Traduction persistée d'un template de log
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateTranslation {
+    pub template_hash: String,
+    pub template_pattern: String,
+    pub french_format: String,
+    pub status_level: String,
+    pub learned_from: String,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Résultat du parsing Drain-like

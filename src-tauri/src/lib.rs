@@ -3,6 +3,7 @@ pub mod db;
 pub mod error;
 pub mod collector;
 pub mod engine;
+pub mod translator;
 pub mod syslog_listener;
 pub mod siem_exporter;
 pub mod webhook_notifier;
@@ -14,6 +15,7 @@ pub mod web_server;
 use db::Database;
 use engine::DetectionPipeline;
 use syslog_listener::SyslogServer;
+use translator::LogTranslator;
 use web_server::LanWebServer;
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -25,6 +27,7 @@ pub struct AppState {
     pub db: Arc<Database>,
     pub engine: Arc<Mutex<DetectionPipeline>>,
     pub settings: Arc<Mutex<models::AppSettings>>,
+    pub translator: Arc<LogTranslator>,
     pub syslog_server: Arc<SyslogServer>,
     pub collector: Arc<Mutex<collector::LogCollector>>,
     pub network_sniffer: Arc<network::NetworkSniffer>,
@@ -36,11 +39,19 @@ impl AppState {
         let db = Arc::new(Database::new(db_path)?);
         let settings = models::AppSettings::default();
         let engine = Arc::new(Mutex::new(DetectionPipeline::new(db.clone(), settings.detection.clone(), app_handle.clone())));
+        let translator = Arc::new(LogTranslator::new());
+
+        // Charger les traductions apprises ou personnalisées depuis la base SQLite
+        if let Ok(translations) = db.get_all_template_translations() {
+            translator.load_custom_translations(translations);
+        }
+
         let syslog_server = Arc::new(SyslogServer::new(db.clone(), Some(engine.clone()), 1514));
         
         let collector = Arc::new(Mutex::new(collector::LogCollector::new(
             db.clone(),
             Some(engine.clone()),
+            Some(translator.clone()),
             Some(app_handle.clone()),
         )));
         
@@ -61,6 +72,7 @@ impl AppState {
             db,
             engine,
             settings: Arc::new(Mutex::new(settings)),
+            translator,
             syslog_server,
             collector,
             network_sniffer,
@@ -189,6 +201,12 @@ pub fn run() {
             commands::get_lan_server_status,
             commands::generate_random_access_key,
             commands::purge_old_logs,
+            commands::update_log_source_priority,
+            commands::get_template_translations,
+            commands::save_template_translation,
+            commands::get_translation_dictionary_rules,
+            commands::reload_translation_dictionary,
+            commands::load_custom_translation_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DeFuDoLog");

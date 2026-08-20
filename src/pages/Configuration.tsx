@@ -946,6 +946,50 @@ export default function Configuration() {
               </div>
             )}
           </div>
+
+          {/* Dictionnaire Sémantique & Traduction des Logs */}
+          <div className="card space-y-4 border border-surface-700/80">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <Database size={16} className="text-emerald-400" />
+                <span>Dictionnaire Sémantique & Fichier de Traduction</span>
+              </h3>
+              <span className="badge bg-emerald-500/10 text-emerald-400 text-2xs border border-emerald-500/30">
+                translations_fr.json
+              </span>
+            </div>
+
+            <p className="text-xs text-surface-400 leading-relaxed">
+              Le moteur sémantique de DeFuDoLog utilise un dictionnaire de gabarits structuré au format JSON pour vulgariser instantanément les logs bruts en français clair sans surcoût CPU ($O(1)$).
+            </p>
+
+            <div className="bg-surface-900/80 p-3 rounded-xl border border-surface-800 space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-surface-300 font-medium">Emplacement par défaut :</span>
+                <span className="font-mono text-2xs text-emerald-300 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
+                  src-tauri/dictionaries/translations_fr.json
+                </span>
+              </div>
+
+              <div className="pt-2 border-t border-surface-800 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const count = await invoke<number>("reload_translation_dictionary");
+                      alert(`Dictionnaire rechargé avec succès (${count} règles actives) !`);
+                    } catch (e) {
+                      alert("Erreur lors du rechargement: " + String(e));
+                    }
+                  }}
+                  className="btn-secondary text-xs flex items-center gap-1.5"
+                >
+                  <RotateCcw size={13} />
+                  Recharger depuis JSON
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

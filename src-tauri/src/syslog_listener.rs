@@ -141,6 +141,7 @@ impl SyslogServer {
             hostname: hostname.clone(),
             raw_message: message.clone(),
             log_hash,
+            meaning: None,
             timestamp: Utc::now(),
             ingested_at: Utc::now(),
         };

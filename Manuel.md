@@ -17,21 +17,37 @@ Les fuites de données (*Data Exfiltration / Data Leakage*) constituent la menac
 
 ---
 
-## 2. Architecture Globale du Pipeline Multi-Couche
+## 2. Architecture Globale du Pipeline Multi-Couche & Traduction Sémantique
 
 ```
-                  ┌──> AXE 1 : DLP Déterministe (Regex O(1) / LazyLock) ─────────┐
-                  ├──> AXE 2 : Drain Structural (Mining Template & Zero-Day) ────┤
-[Log Brut Ingest] ┼──> AXE 3 : Sémantique BGE (Similarité Cosinus Menaces) ──────┼──> [Fusion Score Composite] ──> [Arbitrage SOC LLM] ──┬──> [Kafka Outbound]
-                  ├──> AXE 4 : HDBSCAN Outlier & Écart-Type Géométrique ─────────┤                                                          ├──> [SOAR / Webhooks]
-                  └──> AXE 5 : Corrélation Temporelle (Exponential Decay) ───────┘                                                          └──> [SIEM CEF/LEEF]
+                                      [ Log Brut Ingesté ]
+                                               │
+               ┌───────────────────────────────┴───────────────────────────────┐
+               ▼                                                               ▼
+[ Moteur de Traduction Sémantique O(1) ]                     [ Pipeline de Détection Multi-Axes ]
+  • Dictionnaire Expert (Linux, Win, Web, Net)                 ├──> AXE 1 : DLP Déterministe (Regex O(1))
+  • Extraction Drain & Interpolation Variables                 ├──> AXE 2 : Drain Structural & Zero-Day
+  • Apprentissage Asynchrone via LLM                           ├──> AXE 3 : Sémantique BGE (FastEmbed)
+  • "Sens Métier" en Français Clair (🟢 🔴 ⚠️ ℹ️)              ├──> AXE 4 : HDBSCAN Outlier Scoring
+               │                                               └──> AXE 5 : Corrélation Temporelle
+               ▼                                                               │
+┌──────────────────────────────┐                                               ▼
+│ MODES D'AFFICHAGE MODULABLES │                                    [ Fusion Score Composite ]
+│ • 👁️ Vue Hybride (Brut + Sens)│                                               │
+│ • 📖 Vue Vulgarisée (Sens seul)│                                              ▼
+└──────────────────────────────┘                                     [ Arbitrage Contextuel SOC LLM ]
+                                                                               │
+                                                       ┌───────────────────────┴───────────────────────┐
+                                                       ▼                                               ▼
+                                            [ Kafka Outbound Stream ]                        [ Alertes SIEM & SOAR ]
 ```
 
 ### Justification des Choix Technologiques
-1. **HDBSCAN + Outlier Scoring** : Détection sans paramètre $\epsilon$ rigide, calcul de distance mutuelle de reachability et score GLOSH.
-2. **FastEmbed & ONNX Runtime (Rust)** : Inférence vectorielle locale en **< 1.5 ms par log** (< 80 Mo de RAM, pas de runtime Python).
-3. **Double Évaluation Parallèle** : Données brutes et templates structurés analysés conjointement.
-4. **Arbitrage Contextuel LLM (Tier-2)** : Analyse de la storyline chronologique ($\pm 10$ logs voisins) pour éliminer les faux positifs et générer des explications en langage naturel.
+1. **Traducteur Sémantique Déterministe ($O(1)$ à 0% CPU)** : Traduction instantanée des journaux techniques en phrases compréhensibles par tout collaborateur, par substitution des variables réelles (IP, Utilisateur, Port, Service) sans risque d'hallucination.
+2. **HDBSCAN + Outlier Scoring** : Détection sans paramètre $\epsilon$ rigide, calcul de distance mutuelle de reachability et score GLOSH.
+3. **FastEmbed & ONNX Runtime (Rust)** : Inférence vectorielle locale en **< 1.5 ms par log** (< 80 Mo de RAM, pas de runtime Python).
+4. **Isolation par Source & Machine** : Traitement et filtrage individualisé de chaque entité (`PC1`, `Serveur-Web`) avec priorité paramétrable (Normale, Haute 🟠, Critique 🔴).
+5. **Arbitrage Contextuel LLM (Tier-2)** : Analyse de la storyline chronologique ($\pm 10$ logs voisins) pour éliminer les faux positifs et générer des explications en langage naturel.
 
 ---
 

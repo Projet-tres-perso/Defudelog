@@ -15,6 +15,7 @@ use uuid::Uuid;
 pub struct LogCollector {
     db: std::sync::Arc<Database>,
     engine: Option<std::sync::Arc<parking_lot::Mutex<crate::engine::DetectionPipeline>>>,
+    translator: Option<std::sync::Arc<crate::translator::LogTranslator>>,
     app_handle: Option<tauri::AppHandle>,
     active_watchers: Vec<FileWatcherHandle>,
     running: bool,
@@ -29,11 +30,13 @@ impl LogCollector {
     pub fn new(
         db: std::sync::Arc<Database>,
         engine: Option<std::sync::Arc<parking_lot::Mutex<crate::engine::DetectionPipeline>>>,
+        translator: Option<std::sync::Arc<crate::translator::LogTranslator>>,
         app_handle: Option<tauri::AppHandle>,
     ) -> Self {
         Self {
             db,
             engine,
+            translator,
             app_handle,
             active_watchers: Vec::new(),
             running: false,
@@ -48,7 +51,7 @@ impl LogCollector {
         for source in sources {
             match &source.source_type {
                 SourceType::FileWatcher { path, pattern: _ } => {
-                    if let Ok(handle) = self.watch_file(&source, &path) {
+                    if let Ok(handle) = self.watch_file(&source, path) {
                         self.active_watchers.push(handle);
                     }
                 }
@@ -59,7 +62,7 @@ impl LogCollector {
                     self.start_journald_collection(&source)?;
                 }
                 SourceType::WindowsEventLog { channel, query } => {
-                    self.start_windows_collection(&source, &channel, query.as_deref())?;
+                    self.start_windows_collection(&source, channel, query.as_deref())?;
                 }
                 SourceType::Kafka { .. } => {
                     log::info!("Kafka source {}: handled by kafka module", source.id);
@@ -84,6 +87,7 @@ impl LogCollector {
         let source_id = source.id.clone();
         let db = self.db.clone();
         let engine = self.engine.clone();
+        let translator = self.translator.clone();
         let app_handle = self.app_handle.clone();
         let file_path = std::path::PathBuf::from(path);
 
@@ -127,23 +131,22 @@ impl LogCollector {
                                 *pos = 0;
                             }
 
-                            if let Ok(_) = file.seek(SeekFrom::Start(*pos)) {
+                            if file.seek(SeekFrom::Start(*pos)).is_ok() {
                                 let reader = BufReader::new(file);
-                                for line in reader.lines() {
-                                    if let Ok(line) = line {
-                                        let line_len = line.len() as u64 + 1;
-                                        if !line.trim().is_empty() {
-                                            let _ = Self::ingest_line(
-                                                &db,
-                                                engine.as_ref(),
-                                                app_handle.as_ref(),
-                                                &source_id_thread,
-                                                &hostname,
-                                                &line,
-                                            );
-                                        }
-                                        *pos += line_len;
+                                for line in reader.lines().map_while(Result::ok) {
+                                    let line_len = line.len() as u64 + 1;
+                                    if !line.trim().is_empty() {
+                                        let _ = Self::ingest_line(
+                                            &db,
+                                            engine.as_ref(),
+                                            translator.as_ref(),
+                                            app_handle.as_ref(),
+                                            &source_id_thread,
+                                            &hostname,
+                                            &line,
+                                        );
                                     }
+                                    *pos += line_len;
                                 }
                             }
                         }
@@ -151,7 +154,7 @@ impl LogCollector {
                     Err(e) => {
                         let err_msg = format!("[DEFUDOLOG PERMISSION ERROR] Impossible de lire le fichier '{}' : {}", file_path.display(), e);
                         log::error!("{}", err_msg);
-                        let _ = Self::ingest_line(&db, engine.as_ref(), app_handle.as_ref(), &source_id_thread, &hostname, &err_msg);
+                        let _ = Self::ingest_line(&db, engine.as_ref(), translator.as_ref(), app_handle.as_ref(), &source_id_thread, &hostname, &err_msg);
                     }
                 }
             };
@@ -183,6 +186,7 @@ impl LogCollector {
         let hostname = source.hostname.clone();
         let db = self.db.clone();
         let engine = self.engine.clone();
+        let translator = self.translator.clone();
         let app_handle = self.app_handle.clone();
         let pred = predicate.unwrap_or("").to_string();
 
@@ -200,18 +204,17 @@ impl LogCollector {
                     if let Some(stdout) = child.stdout.take() {
                         use std::io::{BufRead, BufReader};
                         let reader = BufReader::new(stdout);
-                        for line in reader.lines() {
-                            if let Ok(log_line) = line {
-                                if !log_line.trim().is_empty() {
-                                    let _ = Self::ingest_line(
-                                        &db,
-                                        engine.as_ref(),
-                                        app_handle.as_ref(),
-                                        &source_id,
-                                        &hostname,
-                                        &log_line,
-                                    );
-                                }
+                        for log_line in reader.lines().map_while(Result::ok) {
+                            if !log_line.trim().is_empty() {
+                                let _ = Self::ingest_line(
+                                    &db,
+                                    engine.as_ref(),
+                                    translator.as_ref(),
+                                    app_handle.as_ref(),
+                                    &source_id,
+                                    &hostname,
+                                    &log_line,
+                                );
                             }
                         }
                     }
@@ -231,6 +234,7 @@ impl LogCollector {
         let hostname = source.hostname.clone();
         let db = self.db.clone();
         let engine = self.engine.clone();
+        let translator = self.translator.clone();
         let app_handle = self.app_handle.clone();
 
         thread::spawn(move || {
@@ -244,18 +248,17 @@ impl LogCollector {
                     if let Some(stdout) = child.stdout.take() {
                         use std::io::{BufRead, BufReader};
                         let reader = BufReader::new(stdout);
-                        for line in reader.lines() {
-                            if let Ok(log_line) = line {
-                                if !log_line.trim().is_empty() {
-                                    let _ = Self::ingest_line(
-                                        &db,
-                                        engine.as_ref(),
-                                        app_handle.as_ref(),
-                                        &source_id,
-                                        &hostname,
-                                        &log_line,
-                                    );
-                                }
+                        for log_line in reader.lines().map_while(Result::ok) {
+                            if !log_line.trim().is_empty() {
+                                let _ = Self::ingest_line(
+                                    &db,
+                                    engine.as_ref(),
+                                    translator.as_ref(),
+                                    app_handle.as_ref(),
+                                    &source_id,
+                                    &hostname,
+                                    &log_line,
+                                );
                             }
                         }
                     }
@@ -280,6 +283,7 @@ impl LogCollector {
         let hostname = source.hostname.clone();
         let db = self.db.clone();
         let engine = self.engine.clone();
+        let translator = self.translator.clone();
         let app_handle = self.app_handle.clone();
         let channel = channel.to_string();
 
@@ -301,7 +305,7 @@ impl LogCollector {
                     let err_text = String::from_utf8_lossy(&output.stderr);
                     if err_text.contains("Access is denied") || err_text.contains("accès est refusé") || err_text.contains("UnauthorizedAccess") {
                         let warn_msg = format!("[DEFUDOLOG WARNING] Accès restreint au canal Windows '{}'. Lancez DeFuDoLog en tant qu'Administrateur pour surveiller ce canal.", channel);
-                        let _ = Self::ingest_line(&db, engine.as_ref(), app_handle.as_ref(), &source_id, &hostname, &warn_msg);
+                        let _ = Self::ingest_line(&db, engine.as_ref(), translator.as_ref(), app_handle.as_ref(), &source_id, &hostname, &warn_msg);
                     }
                 } else {
                     let text = String::from_utf8_lossy(&output.stdout);
@@ -311,6 +315,7 @@ impl LogCollector {
                             let _ = Self::ingest_line(
                                 &db,
                                 engine.as_ref(),
+                                translator.as_ref(),
                                 app_handle.as_ref(),
                                 &source_id,
                                 &hostname,
@@ -339,19 +344,18 @@ impl LogCollector {
                     if let Some(stdout) = child.stdout.take() {
                         use std::io::{BufRead, BufReader};
                         let reader = BufReader::new(stdout);
-                        for line in reader.lines() {
-                            if let Ok(log_line) = line {
-                                let trimmed = log_line.trim();
-                                if !trimmed.is_empty() {
-                                    let _ = Self::ingest_line(
-                                        &db,
-                                        engine.as_ref(),
-                                        app_handle.as_ref(),
-                                        &source_id,
-                                        &hostname,
-                                        trimmed,
-                                    );
-                                }
+                        for log_line in reader.lines().map_while(Result::ok) {
+                            let trimmed = log_line.trim();
+                            if !trimmed.is_empty() {
+                                let _ = Self::ingest_line(
+                                    &db,
+                                    engine.as_ref(),
+                                    translator.as_ref(),
+                                    app_handle.as_ref(),
+                                    &source_id,
+                                    &hostname,
+                                    trimmed,
+                                );
                             }
                         }
                     }
@@ -369,6 +373,7 @@ impl LogCollector {
     fn ingest_line(
         db: &Database,
         engine: Option<&std::sync::Arc<parking_lot::Mutex<crate::engine::DetectionPipeline>>>,
+        translator: Option<&std::sync::Arc<crate::translator::LogTranslator>>,
         app_handle: Option<&tauri::AppHandle>,
         source_id: &str,
         hostname: &str,
@@ -381,26 +386,43 @@ impl LogCollector {
         };
 
         let now = Utc::now();
+
+        // 1. Calcul du Sens Métier en français vulgarisé
+        let meaning = if let Some(tr) = translator {
+            let (tpl, params) = if let Some(engine_lock) = engine {
+                let mut eng = engine_lock.lock();
+                let parsed = eng.parse_log_structure(line);
+                (parsed.template, parsed.parameters)
+            } else {
+                (line.to_string(), Vec::new())
+            };
+            let trans = tr.translate(line, &tpl, &params);
+            Some(trans.meaning)
+        } else {
+            None
+        };
+
         let raw_log = RawLog {
             id: Uuid::new_v4().to_string(),
             source_id: source_id.to_string(),
             hostname: hostname.to_string(),
             raw_message: line.to_string(),
             log_hash,
+            meaning,
             timestamp: now,
             ingested_at: now,
         };
 
-        // 1. Insertion SQLite chiffrée
+        // 2. Insertion SQLite chiffrée
         db.insert_raw_log(&raw_log)?;
 
-        // 2. Traitement immédiat par le moteur d'IA multi-axes
+        // 3. Traitement immédiat par le moteur d'IA multi-axes
         if let Some(engine_lock) = engine {
             let mut eng = engine_lock.lock();
             let _ = eng.process_log(source_id, hostname, line, now);
         }
 
-        // 3. Diffusion temps réel vers le frontend
+        // 4. Diffusion temps réel vers le frontend
         if let Some(app) = app_handle {
             use tauri::Emitter;
             let _ = app.emit("log-ingested", &raw_log);
@@ -472,7 +494,7 @@ impl LogCollector {
                         category: category.to_string(),
                         source_type: SourceType::FileWatcher {
                             path: path.to_string(),
-                            pattern: "*".to_string(),
+                            pattern: Some("*".to_string()),
                         },
                         target_path: path.to_string(),
                         hostname: hostname.clone(),
@@ -542,7 +564,7 @@ impl LogCollector {
                         category: category.to_string(),
                         source_type: SourceType::FileWatcher {
                             path: path.to_string(),
-                            pattern: "*".to_string(),
+                            pattern: Some("*".to_string()),
                         },
                         target_path: path.to_string(),
                         hostname: hostname.clone(),

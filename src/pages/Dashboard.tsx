@@ -381,7 +381,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="space-y-2 font-mono text-2xs">
+          <div className="space-y-2 text-2xs">
             {filteredLogs.length === 0 ? (
               <div className="text-center py-8 text-surface-500 text-xs font-sans">
                 {recentLogs.length === 0 ? "En attente d'ingestion de logs..." : "Aucun log correspondant au filtre."}
@@ -389,22 +389,28 @@ export default function Dashboard() {
             ) : (
               filteredLogs.map((l) => {
                 const isNet = isNetworkLog(l);
+                const meaning = l.meaning || l.raw_message;
                 return (
-                  <div key={l.id} className="p-2.5 rounded bg-surface-900/80 border border-surface-800/80 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <div key={l.id} className="p-2.5 rounded-lg bg-surface-900/80 border border-surface-800/80 flex items-start justify-between gap-3 hover:border-surface-700 transition-colors">
+                    <div className="flex items-start gap-2 flex-1 min-w-0">
                       {isNet ? (
-                        <span className="text-3xs font-semibold px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 flex items-center gap-1 shrink-0">
+                        <span className="text-3xs font-semibold px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 flex items-center gap-1 shrink-0 font-mono mt-0.5">
                           <Globe size={10} />
                           {l.hostname}
                         </span>
                       ) : (
-                        <span className="text-3xs font-semibold px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 flex items-center gap-1 shrink-0">
+                        <span className="text-3xs font-semibold px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 flex items-center gap-1 shrink-0 font-mono mt-0.5">
                           💻 {l.hostname}
                         </span>
                       )}
-                      <span className="text-surface-300 truncate">{l.raw_message}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-surface-100 font-medium text-xs leading-snug">{meaning}</p>
+                        {l.meaning && (
+                          <p className="text-surface-500 font-mono text-3xs truncate mt-0.5">{l.raw_message}</p>
+                        )}
+                      </div>
                     </div>
-                    <span className="text-surface-500 whitespace-nowrap">
+                    <span className="text-surface-500 whitespace-nowrap font-mono text-3xs mt-0.5">
                       {new Date(l.timestamp).toLocaleTimeString()}
                     </span>
                   </div>

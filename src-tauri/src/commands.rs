@@ -11,7 +11,7 @@ fn parse_source_type(t: &str, config: &serde_json::Value) -> SourceType {
     match t.to_lowercase().replace('_', "").as_str() {
         "filewatcher" => SourceType::FileWatcher {
             path: config["path"].as_str().unwrap_or("").into(),
-            pattern: config["pattern"].as_str().unwrap_or("*").into(),
+            pattern: config["pattern"].as_str().map(|s| s.into()),
         },
         "journald" => SourceType::Journald {
             unit_filter: config["unit_filter"].as_str().map(|s| s.into()),
@@ -35,7 +35,7 @@ fn parse_source_type(t: &str, config: &serde_json::Value) -> SourceType {
         },
         _ => SourceType::FileWatcher {
             path: config["path"].as_str().unwrap_or("").into(),
-            pattern: config["pattern"].as_str().unwrap_or("*").into(),
+            pattern: config["pattern"].as_str().map(|s| s.into()),
         },
     }
 }
@@ -63,6 +63,7 @@ pub fn add_log_source(state: State<'_, AppState>, name: String, source_type: Str
         hostname,
         os,
         enabled: true,
+        priority: "normal".to_string(),
         config,
         created_at: Utc::now(),
         updated_at: Utc::now(),
@@ -204,6 +205,7 @@ pub fn get_syslog_status(state: State<'_, AppState>) -> Result<serde_json::Value
 /// - Dashboard: { limit, offset, query, sourceId }
 /// - LogViewer: { page, perPage, search }
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn get_raw_logs(
     state: State<'_, AppState>,
     limit: Option<usize>,
@@ -232,7 +234,7 @@ pub fn get_raw_logs(
         effective_search.as_deref(),
     ).map_err(|e| e.to_string())?;
 
-    let effective_page = if effective_limit > 0 { effective_offset / effective_limit + 1 } else { 1 };
+    let effective_page = effective_offset.checked_div(effective_limit).map(|v| v + 1).unwrap_or(1);
 
     Ok(serde_json::json!({
         "logs": logs,
@@ -475,10 +477,11 @@ pub fn generate_demo_logs(state: State<'_, AppState>) -> Result<serde_json::Valu
             let demo_source = LogSource {
                 id: source_id.clone(),
                 name: format!("Source Démo ({})", hostname),
-                source_type: SourceType::FileWatcher { path: "/var/log/demo.log".to_string(), pattern: "*.log".to_string() },
+                source_type: SourceType::FileWatcher { path: "/var/log/demo.log".to_string(), pattern: Some("*.log".to_string()) },
                 hostname: hostname.to_string(),
                 os: "demo".to_string(),
                 enabled: true,
+                priority: "normal".to_string(),
                 config: serde_json::json!({}),
                 created_at: now,
                 updated_at: now,
@@ -693,3 +696,71 @@ pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<(), String> {
 pub fn purge_demo_sources(state: State<'_, AppState>) -> Result<(), String> {
     state.db.purge_demo_sources().map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn update_log_source_priority(
+    state: State<'_, AppState>,
+    id: String,
+    priority: String,
+) -> Result<(), String> {
+    state.db.update_source_priority(&id, &priority).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_template_translations(
+    state: State<'_, AppState>,
+) -> Result<Vec<(String, String, String)>, String> {
+    state.db.get_all_template_translations().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_template_translation(
+    state: State<'_, AppState>,
+    template_pattern: String,
+    french_format: String,
+    status_level: String,
+) -> Result<(), String> {
+    let hash = {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(template_pattern.as_bytes());
+        format!("{:x}", hasher.finalize())
+    };
+
+    let translation = crate::models::TemplateTranslation {
+        template_hash: hash,
+        template_pattern: template_pattern.clone(),
+        french_format: french_format.clone(),
+        status_level: status_level.clone(),
+        learned_from: "user_custom".to_string(),
+        created_at: chrono::Utc::now(),
+    };
+
+    state.db.save_template_translation(&translation).map_err(|e| e.to_string())?;
+    state.translator.load_custom_translations(vec![(template_pattern, french_format, status_level)]);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_translation_dictionary_rules(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::translator::TranslationRule>, String> {
+    Ok(state.translator.get_all_rules())
+}
+
+#[tauri::command]
+pub fn reload_translation_dictionary(
+    state: State<'_, AppState>,
+) -> Result<usize, String> {
+    Ok(state.translator.reload_default_dictionary())
+}
+
+#[tauri::command]
+pub fn load_custom_translation_file(
+    state: State<'_, AppState>,
+    file_path: String,
+) -> Result<usize, String> {
+    let path = std::path::Path::new(&file_path);
+    state.translator.load_from_file(path)
+}
+

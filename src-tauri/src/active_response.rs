@@ -45,7 +45,7 @@ impl ActiveResponseEngine {
         if is_windows {
             script_path.push("defudolog_active_response.ps1");
             std::fs::write(&script_path, script_content)
-                .map_err(|e| AppError::Io(e))?;
+                .map_err(AppError::Io)?;
 
             log::warn!("🔥 SOAR: Exécution du script PowerShell de mitigation: {:?}", script_path);
 
@@ -58,11 +58,11 @@ impl ActiveResponseEngine {
                 .arg(arg1)
                 .arg(arg2)
                 .spawn()
-                .map_err(|e| AppError::Io(e))?;
+                .map_err(AppError::Io)?;
         } else {
             script_path.push("defudolog_active_response.sh");
             std::fs::write(&script_path, script_content)
-                .map_err(|e| AppError::Io(e))?;
+                .map_err(AppError::Io)?;
 
             #[cfg(unix)]
             {
@@ -80,7 +80,7 @@ impl ActiveResponseEngine {
                 .arg(arg1)
                 .arg(arg2)
                 .spawn()
-                .map_err(|e| AppError::Io(e))?;
+                .map_err(AppError::Io)?;
         }
 
         Ok(())
