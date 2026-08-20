@@ -1,18 +1,28 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { RawLog, ParsedLog } from "@/types";
-import { Search, Filter, RefreshCw, ChevronLeft, ChevronRight, Globe, Monitor } from "lucide-react";
+import type { RawLog, LogSource } from "@/types";
+import { Search, RefreshCw, ChevronLeft, ChevronRight, Globe, Monitor, BookOpen, Layers, Server, ShieldCheck, ShieldAlert } from "lucide-react";
 
 export default function LogViewer() {
   const [logs, setLogs] = useState<RawLog[]>([]);
-  const [selectedLog, setSelectedLog] = useState<ParsedLog | null>(null);
+  const [sources, setSources] = useState<LogSource[]>([]);
+  const [selectedSourceId, setSelectedSourceId] = useState<string>("all");
+  const [displayMode, setDisplayMode] = useState<"hybrid" | "meaning_only">("hybrid");
   const [search, setSearch] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
   const [networkTypeFilter, setNetworkTypeFilter] = useState<"all" | "local" | "network">("all");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const perPage = 50;
+
+  const fetchSources = async () => {
+    try {
+      const srcList = await invoke<LogSource[]>("list_log_sources");
+      setSources(srcList || []);
+    } catch (e) {
+      console.error("Failed to fetch sources:", e);
+    }
+  };
 
   const isNetworkLog = (log: RawLog) => {
     const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(log.hostname) && log.hostname !== "127.0.0.1";
@@ -26,7 +36,7 @@ export default function LogViewer() {
         limit: perPage,
         offset: (page - 1) * perPage,
         search: search.trim() ? search.trim() : null,
-        sourceId: sourceFilter.trim() ? sourceFilter.trim() : null,
+        sourceId: selectedSourceId !== "all" ? selectedSourceId : null,
       });
 
       setLogs(result?.logs || []);
@@ -36,9 +46,10 @@ export default function LogViewer() {
     } finally {
       setLoading(false);
     }
-  }, [search, sourceFilter, page]);
+  }, [search, selectedSourceId, page]);
 
   useEffect(() => {
+    fetchSources();
     fetchLogs();
     const interval = setInterval(fetchLogs, 4000);
     return () => clearInterval(interval);
@@ -72,42 +83,48 @@ export default function LogViewer() {
   const totalPages = Math.ceil(total / perPage);
 
   return (
-    <div className="p-6 space-y-6 h-full flex flex-col">
-      <div className="flex items-center justify-between">
+    <div className="p-6 space-y-5 h-full flex flex-col">
+      {/* Header & Source isolation selector */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold">Explorateur de logs</h2>
-          <p className="text-sm text-surface-400 mt-1">
-            {total.toLocaleString()} logs indexés et chiffrés
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <span>Explorateur & Traducteur Sémantique</span>
+            <span className="text-2xs bg-primary-500/20 text-primary-400 font-mono px-2 py-0.5 rounded-full border border-primary-500/30">
+              Sens Métier Actif
+            </span>
+          </h2>
+          <p className="text-sm text-surface-400 mt-0.5">
+            {total.toLocaleString()} événements traduits et indexés
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Network vs Local Tabs */}
+
+        {/* View Mode Switcher + Action buttons */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Mode Switcher: Hybrid vs Meaning Only */}
           <div className="flex items-center gap-1 bg-surface-800 p-1 rounded-xl border border-surface-700 text-xs">
             <button
-              onClick={() => setNetworkTypeFilter("all")}
-              className={`px-3 py-1.5 rounded-lg transition-colors font-medium ${
-                networkTypeFilter === "all" ? "bg-surface-600 text-white shadow-sm" : "text-surface-400 hover:text-surface-200"
+              onClick={() => setDisplayMode("hybrid")}
+              className={`px-3 py-1.5 rounded-lg transition-all font-medium flex items-center gap-1.5 ${
+                displayMode === "hybrid"
+                  ? "bg-surface-600 text-white shadow-sm"
+                  : "text-surface-400 hover:text-surface-200"
               }`}
+              title="Affiche le log brut et son explication vulgarisée"
             >
-              Tous
+              <Layers size={14} />
+              <span>Vue Hybride (Brut + Sens)</span>
             </button>
             <button
-              onClick={() => setNetworkTypeFilter("local")}
-              className={`px-3 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1.5 ${
-                networkTypeFilter === "local" ? "bg-purple-900/70 text-purple-200 shadow-sm border border-purple-700/50" : "text-surface-400 hover:text-surface-200"
+              onClick={() => setDisplayMode("meaning_only")}
+              className={`px-3 py-1.5 rounded-lg transition-all font-medium flex items-center gap-1.5 ${
+                displayMode === "meaning_only"
+                  ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm font-semibold"
+                  : "text-surface-400 hover:text-surface-200"
               }`}
+              title="Masque le log brut pour n'afficher que le récit en français clair"
             >
-              <Monitor size={13} />
-              💻 Hôte Local
-            </button>
-            <button
-              onClick={() => setNetworkTypeFilter("network")}
-              className={`px-3 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1.5 ${
-                networkTypeFilter === "network" ? "bg-cyan-900/70 text-cyan-200 shadow-sm border border-cyan-700/50" : "text-surface-400 hover:text-surface-200"
-              }`}
-            >
-              <Globe size={13} />
-              🌐 Réseau (IP)
+              <BookOpen size={14} />
+              <span>Vue Vulgarisée (Sens uniquement)</span>
             </button>
           </div>
 
@@ -118,75 +135,153 @@ export default function LogViewer() {
         </div>
       </div>
 
-      {/* Search bar */}
-      <div className="flex gap-3">
-        <div className="relative flex-1">
+      {/* Control bar: Machine/Source Picker + Network Filter + Search */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+        {/* Source / Machine Dedicated Selector */}
+        <div className="md:col-span-4 flex items-center gap-2 bg-surface-800/80 border border-surface-700/80 rounded-xl px-3 py-2">
+          <Server size={16} className="text-primary-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <label className="block text-3xs font-semibold uppercase text-surface-400 tracking-wider">
+              Entité Source / Machine
+            </label>
+            <select
+              value={selectedSourceId}
+              onChange={(e) => { setSelectedSourceId(e.target.value); setPage(1); }}
+              className="w-full bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer"
+            >
+              <option value="all" className="bg-surface-800 text-white">
+                🌐 Toutes les entités & machines ({sources.length})
+              </option>
+              {sources.map((s) => (
+                <option key={s.id} value={s.id} className="bg-surface-800 text-white">
+                  {s.priority === "critical" ? "🔴" : s.priority === "high" ? "🟠" : "💻"} {s.name} ({s.hostname})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Network vs Local Scope */}
+        <div className="md:col-span-3 flex items-center gap-1 bg-surface-800/80 p-1.5 rounded-xl border border-surface-700/80 text-xs">
+          <button
+            onClick={() => setNetworkTypeFilter("all")}
+            className={`flex-1 py-1.5 rounded-lg text-center font-medium transition-colors ${
+              networkTypeFilter === "all" ? "bg-surface-600 text-white" : "text-surface-400 hover:text-surface-200"
+            }`}
+          >
+            Tous
+          </button>
+          <button
+            onClick={() => setNetworkTypeFilter("local")}
+            className={`flex-1 py-1.5 rounded-lg text-center font-medium flex items-center justify-center gap-1 transition-colors ${
+              networkTypeFilter === "local" ? "bg-purple-900/80 text-purple-200" : "text-surface-400 hover:text-surface-200"
+            }`}
+          >
+            <Monitor size={13} />
+            Local
+          </button>
+          <button
+            onClick={() => setNetworkTypeFilter("network")}
+            className={`flex-1 py-1.5 rounded-lg text-center font-medium flex items-center justify-center gap-1 transition-colors ${
+              networkTypeFilter === "network" ? "bg-cyan-900/80 text-cyan-200" : "text-surface-400 hover:text-surface-200"
+            }`}
+          >
+            <Globe size={13} />
+            Réseau
+          </button>
+        </div>
+
+        {/* Search bar */}
+        <div className="md:col-span-5 relative flex items-center">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500" />
           <input
             type="text"
-            className="input pl-10 w-full"
-            placeholder="Rechercher par mot-clé, IP, commande, motif DLP..."
+            className="input pl-10 w-full text-xs"
+            placeholder="Rechercher par mot-clé, IP, commande, sens en français..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
       </div>
 
-      {/* Log table */}
+      {/* Log Feed Display */}
       <div className="flex-1 overflow-hidden flex gap-4 min-h-0">
-        <div className="flex-1 overflow-auto card p-0 flex flex-col">
-          <div className="overflow-y-auto flex-1">
+        <div className="flex-1 overflow-auto card p-0 flex flex-col border border-surface-800">
+          <div className="overflow-y-auto flex-1 divide-y divide-surface-800/60">
             {filteredLogs.length === 0 ? (
-              <div className="p-12 text-center text-surface-500">
-                {loading ? "Chargement des logs..." : "Aucun log correspondant au filtre sélectionné."}
+              <div className="p-16 text-center text-surface-500 space-y-2">
+                <ShieldCheck size={36} className="mx-auto text-surface-600 opacity-60" />
+                <p className="text-sm font-medium">
+                  {loading ? "Chargement des logs en cours..." : "Aucun événement ne correspond à vos critères de recherche."}
+                </p>
+                <p className="text-xs text-surface-600">
+                  Vérifiez vos filtres ou sélectionnez une autre source machine.
+                </p>
               </div>
             ) : (
               filteredLogs.map((log) => {
                 const isNet = isNetworkLog(log);
                 const isSelected = selectedRawLog?.id === log.id;
+                const meaning = log.meaning || log.raw_message;
+
                 return (
                   <div
                     key={log.id}
                     onClick={() => viewContext(log)}
-                    className={`log-line cursor-pointer flex items-center gap-3 p-2.5 border-b border-surface-800/60 hover:bg-surface-800/40 transition-colors ${
-                      isSelected ? "bg-primary-500/10 border-l-4 border-l-primary-500" : ""
+                    className={`cursor-pointer p-3 hover:bg-surface-800/50 transition-all ${
+                      isSelected ? "bg-primary-500/10 border-l-4 border-l-primary-500 shadow-inner" : ""
                     }`}
                   >
-                    <span className="text-surface-500 whitespace-nowrap text-2xs font-mono">
-                      {new Date(log.timestamp).toLocaleString("fr-FR", {
-                        month: "short",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      })}
-                    </span>
+                    {/* Top Metadata Row */}
+                    <div className="flex items-center justify-between text-2xs mb-1.5 gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-surface-400 font-mono">
+                          {new Date(log.timestamp).toLocaleTimeString("fr-FR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })}
+                        </span>
 
-                    {/* Source Origin Badge */}
-                    {isNet ? (
-                      <span className="text-3xs font-semibold px-2 py-0.5 rounded bg-cyan-950/90 text-cyan-400 border border-cyan-800/60 flex items-center gap-1 shrink-0 font-mono">
-                        <Globe size={11} />
-                        {log.hostname}
+                        {isNet ? (
+                          <span className="text-3xs font-semibold px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 flex items-center gap-1 font-mono">
+                            <Globe size={10} />
+                            {log.hostname}
+                          </span>
+                        ) : (
+                          <span className="text-3xs font-semibold px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 flex items-center gap-1 font-mono">
+                            💻 {log.hostname}
+                          </span>
+                        )}
+                      </div>
+
+                      <span className="text-3xs text-surface-500 font-mono">
+                        Source ID: {log.source_id}
                       </span>
-                    ) : (
-                      <span className="text-3xs font-semibold px-2 py-0.5 rounded bg-purple-950/90 text-purple-300 border border-purple-800/60 flex items-center gap-1 shrink-0 font-mono">
-                        💻 {log.hostname}
-                      </span>
+                    </div>
+
+                    {/* Meaning / Interpretation (Sens Vulgarisé) */}
+                    <div className="text-xs leading-relaxed text-surface-100 font-medium">
+                      {meaning}
+                    </div>
+
+                    {/* Raw Log Details (Shown only in Hybrid Mode) */}
+                    {displayMode === "hybrid" && (
+                      <div className="mt-1.5 pt-1.5 border-t border-surface-800/40 font-mono text-2xs text-surface-400 truncate opacity-80 hover:opacity-100 transition-opacity">
+                        <span className="text-surface-500 select-none mr-1.5">Brut :</span>
+                        {log.raw_message}
+                      </div>
                     )}
-
-                    <span className="text-surface-200 truncate flex-1 font-mono text-xs">
-                      {log.raw_message}
-                    </span>
                   </div>
                 );
               })
             )}
           </div>
 
-          {/* Pagination */}
+          {/* Pagination bar */}
           {totalPages > 1 && (
-            <div className="p-3 border-t border-surface-800 flex items-center justify-between text-xs text-surface-400 bg-surface-900/40">
-              <span>Page {page} sur {totalPages}</span>
+            <div className="p-3 border-t border-surface-800 flex items-center justify-between text-xs text-surface-400 bg-surface-900/60">
+              <span>Page {page} sur {totalPages} ({total.toLocaleString()} logs)</span>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -207,49 +302,65 @@ export default function LogViewer() {
           )}
         </div>
 
-        {/* Detail & Context panel */}
+        {/* Investigation & Storyline Side Panel */}
         {selectedRawLog && (
-          <div className="w-96 flex-shrink-0 card space-y-4 overflow-y-auto">
-            <h3 className="font-semibold text-sm flex items-center justify-between">
-              <span>Investigation Chronologique</span>
+          <div className="w-96 flex-shrink-0 card space-y-4 overflow-y-auto border border-surface-800">
+            <div className="flex items-center justify-between border-b border-surface-800 pb-3">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <ShieldAlert size={16} className="text-amber-400" />
+                <span>Investigation de l'Entité</span>
+              </h3>
               <span className="badge bg-primary-500/20 text-primary-400 text-2xs">
                 {contextLogs.length} voisins
               </span>
-            </h3>
+            </div>
             
-            <div className="space-y-3">
-              <div>
-                <span className="text-2xs text-surface-500 uppercase font-semibold">Log Sélectionné</span>
-                <p className="font-mono text-xs text-amber-300 bg-surface-900 border border-amber-500/30 rounded p-2.5 mt-1 break-all">
-                  {selectedRawLog.raw_message}
+            <div className="space-y-4">
+              {/* Sens Métier & Détail */}
+              <div className="bg-surface-800/40 p-3 rounded-xl border border-surface-700/60 space-y-2">
+                <span className="text-3xs text-primary-400 uppercase font-bold tracking-wider">
+                  Interprétation Sémantique
+                </span>
+                <p className="text-xs text-white leading-relaxed font-medium">
+                  {selectedRawLog.meaning || selectedRawLog.raw_message}
                 </p>
-                <p className="text-2xs text-surface-500 mt-1 font-mono">
-                  Hôte: {selectedRawLog.hostname} · Source: {selectedRawLog.source_id}
+                <div className="pt-2 border-t border-surface-700/40 text-2xs text-surface-400 font-mono space-y-1">
+                  <div>Machine : <span className="text-surface-200">{selectedRawLog.hostname}</span></div>
+                  <div>Horodatage : <span className="text-surface-200">{new Date(selectedRawLog.timestamp).toLocaleString("fr-FR")}</span></div>
+                </div>
+              </div>
+
+              {/* Log Brut Technique */}
+              <div>
+                <span className="text-3xs text-surface-500 uppercase font-semibold">Télémétrie Brute</span>
+                <p className="font-mono text-2xs text-amber-300 bg-surface-900 border border-amber-500/20 rounded-lg p-2.5 mt-1 break-all leading-normal">
+                  {selectedRawLog.raw_message}
                 </p>
               </div>
 
+              {/* Storyline Context */}
               {contextLogs.length > 0 && (
                 <div className="pt-2 border-t border-surface-800">
-                  <span className="text-2xs text-surface-400 uppercase font-semibold">
-                    Storyline (Contexte Immédiat ±10 logs)
+                  <span className="text-3xs text-surface-400 uppercase font-bold tracking-wider">
+                    Storyline Chronologique (±10 logs)
                   </span>
-                  <div className="mt-2 space-y-1.5 max-h-96 overflow-y-auto">
+                  <div className="mt-2 space-y-2 max-h-80 overflow-y-auto pr-1">
                     {contextLogs.map((c) => {
                       const isTarget = c.id === selectedRawLog.id;
                       return (
                         <div
                           key={c.id}
-                          className={`p-2 rounded font-mono text-2xs transition-colors ${
+                          className={`p-2.5 rounded-lg text-2xs transition-all ${
                             isTarget
-                              ? "bg-amber-500/15 border border-amber-500/40 text-amber-200"
-                              : "bg-surface-900/80 text-surface-400 border border-surface-800"
+                              ? "bg-amber-500/15 border border-amber-500/40 text-amber-200 shadow-sm"
+                              : "bg-surface-900/80 text-surface-300 border border-surface-800 hover:border-surface-700"
                           }`}
                         >
-                          <div className="flex justify-between text-surface-500 text-3xs mb-0.5">
+                          <div className="flex justify-between text-surface-500 text-3xs mb-1 font-mono">
                             <span>{new Date(c.timestamp).toLocaleTimeString("fr-FR")}</span>
-                            {isTarget && <span className="text-amber-400 font-bold">CIBLE</span>}
+                            {isTarget && <span className="text-amber-400 font-bold">ÉVÉNEMENT CIBLE</span>}
                           </div>
-                          <p className="break-all">{c.raw_message}</p>
+                          <p className="font-medium text-surface-100">{c.meaning || c.raw_message}</p>
                         </div>
                       );
                     })}
@@ -263,3 +374,4 @@ export default function LogViewer() {
     </div>
   );
 }
+

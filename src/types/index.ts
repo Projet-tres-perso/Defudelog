@@ -32,6 +32,7 @@ export interface LogSource {
   hostname: string;
   os: string;
   enabled: boolean;
+  priority?: "normal" | "high" | "critical";
   config: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -43,6 +44,7 @@ export interface RawLog {
   hostname: string;
   raw_message: string;
   log_hash: string;
+  meaning?: string | null;
   timestamp: string;
   ingested_at: string;
 }

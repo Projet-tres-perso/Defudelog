@@ -364,11 +364,10 @@ impl RuleEngine {
                             }
                         }
                     }
-                    RuleType::TemplateMatch => {
-                        if lower.contains(&rule.pattern.to_lowercase()) {
+                    RuleType::TemplateMatch
+                        if lower.contains(&rule.pattern.to_lowercase()) => {
                             matches.push((format!("Règle Template '{}' déclenchée", rule.name), rule.severity.clone()));
                         }
-                    }
                     _ => {}
                 }
             }
@@ -453,10 +452,9 @@ impl SemanticThreatMatcher {
         for profile in profiles.iter() {
             if let Some(ref ref_emb) = profile.embedding {
                 let similarity = cosine_similarity(log_embedding, ref_emb);
-                if similarity > 0.60 {
-                    if best_match.is_none() || similarity > best_match.as_ref().unwrap().0 {
-                        best_match = Some((similarity, profile.category.clone(), profile.description));
-                    }
+                if similarity > 0.60
+                    && (best_match.is_none() || similarity > best_match.as_ref().unwrap().0) {
+                    best_match = Some((similarity, profile.category.clone(), profile.description));
                 }
             }
         }
@@ -475,7 +473,7 @@ fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
     if norm_a == 0.0 || norm_b == 0.0 {
         0.0
     } else {
-        (dot / (norm_a * norm_b)).max(0.0).min(1.0)
+        (dot / (norm_a * norm_b)).clamp(0.0, 1.0)
     }
 }
 
@@ -744,6 +742,11 @@ impl DetectionPipeline {
         }
     }
 
+    /// Analyse la structure Drain du log sans déclencher tout le pipeline d'alerte
+    pub fn parse_log_structure(&mut self, raw_message: &str) -> ParsedResult {
+        self.parser.parse(raw_message)
+    }
+
     /// Processus complet de détection multi-axes sur chaque log entrant
     pub fn process_log(
         &mut self,
@@ -761,6 +764,7 @@ impl DetectionPipeline {
             hostname: hostname.to_string(),
             raw_message: raw_message.to_string(),
             log_hash: log_hash.clone(),
+            meaning: None,
             timestamp,
             ingested_at: Utc::now(),
         };

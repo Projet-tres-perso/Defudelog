@@ -15,10 +15,11 @@ fn setup_test_engine() -> (DetectionPipeline, Arc<Database>) {
         let source = LogSource {
             id: src_id.to_string(),
             name: format!("Test Source {}", src_id),
-            source_type: SourceType::FileWatcher { path: "/var/log/test.log".to_string(), pattern: "*.log".to_string() },
+            source_type: SourceType::FileWatcher { path: "/var/log/test.log".to_string(), pattern: Some("*.log".to_string()) },
             hostname: "test-host".to_string(),
             os: "linux".to_string(),
             enabled: true,
+            priority: "normal".to_string(),
             config: serde_json::json!({}),
             created_at: now,
             updated_at: now,
@@ -151,3 +152,91 @@ fn test_custom_rule_engine_integration() {
     assert_eq!(alert.level, AlertLevel::High);
     assert!(alert.reasons.iter().any(|r| r.contains("Confidential Project Keyword")));
 }
+
+#[test]
+fn test_semantic_log_translation() {
+    let translator = defudolog_lib::translator::LogTranslator::new();
+
+    // 1. Test SSH Connexion Réussie
+    let raw_ssh = "Aug 20 09:42:15 server sshd[1842]: Accepted password for admin from 192.168.1.25 port 54321 ssh2";
+    let tpl_ssh = "sshd: Accepted <METHOD> for <USER> from <IP> port <PORT> ssh2";
+    let params_ssh = vec!["password".to_string(), "admin".to_string(), "192.168.1.25".to_string(), "54321".to_string()];
+    let trans1 = translator.translate(raw_ssh, tpl_ssh, &params_ssh);
+    assert_eq!(trans1.status_level, "success");
+    assert!(trans1.meaning.contains("admin") && trans1.meaning.contains("192.168.1.25"), "SSH translation should contain user and IP: {}", trans1.meaning);
+
+    // 2. Test Sudo Élévation
+    let raw_sudo = "sudo: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/bin/cat /etc/shadow";
+    let trans2 = translator.translate(raw_sudo, "sudo command", &[]);
+    assert_eq!(trans2.status_level, "warning");
+    assert!(trans2.meaning.contains("Élévation de privilèges (sudo)"), "Sudo translation failed: {}", trans2.meaning);
+
+    // 3. Test Windows EventLog 4625 (Échec de connexion)
+    let raw_win = "EventID=4625 Provider=Microsoft-Windows-Security-Auditing An account failed to log on for user Marc";
+    let trans3 = translator.translate(raw_win, "EventID=4625", &[]);
+    assert_eq!(trans3.status_level, "error");
+    assert!(trans3.meaning.contains("Échec de connexion Windows (EventID 4625)"), "Windows 4625 translation failed: {}", trans3.meaning);
+
+    // 4. Test Windows EventLog 1116 (Windows Defender Malware)
+    let raw_defender = "EventID=1116 Provider=Microsoft-Windows-Windows Defender Detected Trojan:Win32/Emotet.A in C:\\test.exe";
+    let trans4 = translator.translate(raw_defender, "EventID=1116", &[]);
+    assert_eq!(trans4.status_level, "error");
+    assert!(trans4.meaning.contains("Windows Defender a détecté un logiciel malveillant"), "Defender translation failed: {}", trans4.meaning);
+
+    // 5. Test Windows EventLog 4740 (Compte verrouillé)
+    let raw_lockout = "EventID=4740 Provider=Microsoft-Windows-Security-Auditing A user account was locked out user John";
+    let trans5 = translator.translate(raw_lockout, "EventID=4740", &[]);
+    assert_eq!(trans5.status_level, "error");
+    assert!(trans5.meaning.contains("Compte utilisateur verrouillé"), "Lockout translation failed: {}", trans5.meaning);
+
+    // 6. Test Windows EventLog 1102 (Journal effacé)
+    let raw_wipe = "EventID=1102 Provider=Microsoft-Windows-Security-Auditing The audit log was cleared";
+    let trans6 = translator.translate(raw_wipe, "EventID=1102", &[]);
+    assert_eq!(trans6.status_level, "error");
+    assert!(trans6.meaning.contains("audit de sécurité Windows a été effacé"), "Log clear translation failed: {}", trans6.meaning);
+
+    // 7. Test macOS TCC Accès Refusé
+    let raw_tcc = "default 10:45:00.123456 tccd: [com.apple.TCC:access] tccd: access denied for client com.suspicious.app to kTCCServiceSystemPolicyAllFiles";
+    let trans7 = translator.translate(raw_tcc, "tccd: access denied", &[]);
+    assert_eq!(trans7.status_level, "error");
+    assert!(trans7.meaning.contains("Contrôle de confidentialité TCC"), "macOS TCC translation failed: {}", trans7.meaning);
+
+    // 8. Test macOS Gatekeeper & XProtect
+    let raw_xprotect = "default 10:45:01.000000 XProtectService: XProtect detected signature OSX.Trojan.Gen in payload";
+    let trans8 = translator.translate(raw_xprotect, "xprotect", &[]);
+    assert_eq!(trans8.status_level, "error");
+    assert!(trans8.meaning.contains("Antivirus XProtect"), "macOS XProtect translation failed: {}", trans8.meaning);
+
+    // 9. Test macOS Touch ID (LocalAuthentication)
+    let raw_touchid = "default 10:45:02.500000 coreauthd: LocalAuthentication evaluated biometric policy successfully for user alex";
+    let trans9 = translator.translate(raw_touchid, "localauthentication", &[]);
+    assert_eq!(trans9.status_level, "success");
+    assert!(trans9.meaning.contains("Touch ID / Apple Watch"), "macOS TouchID translation failed: {}", trans9.meaning);
+
+    // 10. Test NGINX Erreur 502 Bad Gateway
+    let raw_nginx = "192.168.1.50 - - [20/Aug/2026:10:50:00 +0000] \"GET /api/v1/users HTTP/1.1\" 502 150";
+    let trans10 = translator.translate(raw_nginx, "\" 502 ", &[]);
+    assert_eq!(trans10.status_level, "error");
+    assert!(trans10.meaning.contains("Passerelle Défaillante NGINX"), "NGINX 502 translation failed: {}", trans10.meaning);
+
+    // 11. Test Apache ModSecurity WAF Block
+    let raw_apache = "[client 10.0.0.99] ModSecurity: Access denied with code 403 (phase 2). Pattern match 'UNION SELECT' at ARGS:id";
+    let trans11 = translator.translate(raw_apache, "modsecurity: access denied", &[]);
+    assert_eq!(trans11.status_level, "error");
+    assert!(trans11.meaning.contains("WAF ModSecurity"), "Apache ModSecurity translation failed: {}", trans11.meaning);
+
+    // 12. Test MySQL Access Denied
+    let raw_mysql = "2026-08-20T10:50:02.123456Z 14 [Warning] Access denied for user 'root'@'192.168.1.100' (using password: YES)";
+    let trans12 = translator.translate(raw_mysql, "access denied for user", &[]);
+    assert_eq!(trans12.status_level, "error");
+    assert!(trans12.meaning.contains("Alerte Intrusion MySQL"), "MySQL access denied translation failed: {}", trans12.meaning);
+
+    // 13. Test PostgreSQL Password Failed
+    let raw_pg = "2026-08-20 10:50:03 UTC [1234]: FATAL:  password authentication failed for user \"appuser\"";
+    let trans13 = translator.translate(raw_pg, "password authentication failed for user", &[]);
+    assert_eq!(trans13.status_level, "error");
+    assert!(trans13.meaning.contains("Alerte Intrusion PostgreSQL"), "PostgreSQL auth failed translation failed: {}", trans13.meaning);
+}
+
+
+
