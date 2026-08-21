@@ -44,11 +44,13 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Setup OpenSSL on Windows
+      - name: Setup OpenSSL Environment on Windows
         if: matrix.platform == 'windows-latest'
-        uses: ilammy/setup-openssl@v1
-        with:
-          architecture: "x64"
+        run: |
+          if (Test-Path "C:\Program Files\OpenSSL") {
+            echo "OPENSSL_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
+            echo "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
+          }
 
       - name: Install Linux Dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
