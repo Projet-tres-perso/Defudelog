@@ -181,3 +181,24 @@ $$\text{Probabilité Combinée } P(\text{Détection}) = 1 - \prod_{i} (1 - P_i)$
 | **Activer la Console LAN** | Paramètres > Serveur LAN | Rend la console accessible à distance sur le réseau local |
 | **Purger & Archiver les Logs** | Paramètres > Rétention & Purge | Purge des événements anciens avec archive JSON automatique |
 | **Exporter vers SIEM (CEF/LEEF)** | Page Rapports | Téléchargement direct d'alertes normalisées pour SIEM & Excel |
+
+---
+
+## 9. Mises à Jour Automatiques OTA & Intégrité des Données
+
+DeFuDoLog intègre un système officiel de mises à jour automatisées en direct (**Over-The-Air / OTA**) piloté par **Tauri Updater** et **GitHub Actions** :
+
+1. **Zéro Perte de Données Garantie :**
+   - Les données locales (base de données SQLite `defudolog.db`, règles personnalisées, sources configurées, dictionnaires sémantiques, clés d'API et journaux) sont stockées dans le dossier d'application sécurisé du système (`AppData` sous Windows, `Application Support` sous macOS, `~/.local/share` sous Linux).
+   - Les mises à jour remplacent exclusivement le binaire exécutable sans jamais impacter la base de données.
+   - Au redémarrage, les migrations SQLite s'exécutent automatiquement pour adapter le schéma si de nouveaux champs ont été créés.
+
+2. **Expérience Utilisateur Transparente :**
+   - Détection en tâche de fond de nouvelles versions publiées sur GitHub.
+   - **Pastille / Notification lumineuse** dans l'application avec affichage du numéro de version et du changelog.
+   - Bouton **« Mettre à jour maintenant »** avec barre de progression de téléchargement en direct et redémarrage en 1 clic.
+   - Bouton de vérification manuelle disponible dans la page **Configuration**.
+
+3. **Workflow CI/CD GitHub Actions (`.github/workflows/release.yml`) :**
+   - Compilation automatisée pour macOS (Intel & Apple Silicon), Windows (x64) et Linux (x64).
+   - Signature cryptographique Minisign des paquets et publication automatique du descripteur `latest.json`.

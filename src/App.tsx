@@ -18,6 +18,7 @@ import Configuration from "./pages/Configuration";
 import Sources from "./pages/Sources";
 import Reports from "./pages/Reports";
 import Rules from "./pages/Rules";
+import UpdateNotification from "./components/UpdateNotification";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -130,6 +131,7 @@ export default function App() {
           <Route path="/reports" element={<Reports />} />
           <Route path="/config" element={<Configuration />} />
         </Routes>
+        <UpdateNotification />
       </main>
     </div>
   );
