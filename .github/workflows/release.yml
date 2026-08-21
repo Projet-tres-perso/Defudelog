@@ -1,109 +1,68 @@
-name: "publish"
+name: "Release & Auto-Update Build"
+
 on:
   push:
+    tags:
+      - "v*"
     branches:
-      - main # Déclenche le build lors d'un push sur la branche main
+      - main
+  workflow_dispatch:
 
 jobs:
-  publish-tauri:
+  build-tauri:
     permissions:
       contents: write
-      pull-requests: write
-    timeout-minutes: 60 # fastembed/ONNX Runtime peut prendre du temps à compiler
-
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: "windows-latest" # Lance une machine Windows virtuelle
+          - platform: "macos-latest"
+            target: "x86_64-apple-darwin"
+            args: "--target x86_64-apple-darwin"
+          - platform: "macos-latest"
+            target: "aarch64-apple-darwin"
+            args: "--target aarch64-apple-darwin"
+          - platform: "ubuntu-22.04"
+            target: "x86_64-unknown-linux-gnu"
+            args: ""
+          - platform: "windows-latest"
+            target: "x86_64-pc-windows-msvc"
+            args: ""
 
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: setup node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
+          cache: "npm"
 
-      - name: install Rust stable
+      - name: Install Rust Stable
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
         with:
-          workspaces: "./src-tauri -> target"
+          targets: ${{ matrix.target }}
 
-      - name: install dependencies (ubuntu only)
+      - name: Install Linux Dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev
-
-      - name: install frontend dependencies
-        run: npm install
-
-      - name: Install OpenSSL (Windows only)
-        if: matrix.platform == 'windows-latest'
         run: |
-          choco install openssl --x64 -y
-          # Détecter le répertoire d'installation (varie selon la version de choco/openssl)
-          $candidates = @(
-            "C:\Program Files\OpenSSL",
-            "C:\Program Files\OpenSSL-Win64"
-          )
-          $opensslDir = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $opensslDir) { throw "OpenSSL installation directory not found" }
-          echo "OpenSSL found at: $opensslDir"
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libudev-dev
 
-          # Lister tout le contenu pour le debug
-          echo "=== Full OpenSSL directory tree (lib) ==="
-          Get-ChildItem -Path "$opensslDir\lib" -Recurse -Filter "*.lib" | ForEach-Object { echo $_.FullName }
+      - name: Install Frontend Dependencies
+        run: npm ci
 
-          # Chercher libcrypto*.lib dans tout le répertoire OpenSSL
-          $cryptoLib = Get-ChildItem -Path "$opensslDir" -Recurse -Filter "libcrypto*.lib" | Select-Object -First 1
-          if (-not $cryptoLib) { throw "libcrypto*.lib not found anywhere in $opensslDir" }
-          $libDir = $cryptoLib.DirectoryName
-          echo "Found crypto lib: $($cryptoLib.FullName)"
-
-          # Si le fichier ne s'appelle pas exactement libcrypto.lib, créer une copie
-          if ($cryptoLib.Name -ne "libcrypto.lib") {
-            Copy-Item $cryptoLib.FullName "$libDir\libcrypto.lib"
-            echo "Created copy: $libDir\libcrypto.lib"
-          }
-          # Idem pour libssl
-          $sslLib = Get-ChildItem -Path $libDir -Filter "libssl*.lib" | Select-Object -First 1
-          if ($sslLib -and $sslLib.Name -ne "libssl.lib") {
-            Copy-Item $sslLib.FullName "$libDir\libssl.lib"
-            echo "Created copy: $libDir\libssl.lib"
-          }
-
-          echo "OPENSSL_LIB_DIR=$libDir" >> $env:GITHUB_ENV
-          echo "OPENSSL_INCLUDE_DIR=$opensslDir\include" >> $env:GITHUB_ENV
-          echo "OPENSSL_DIR=$opensslDir" >> $env:GITHUB_ENV
-          # Ajouter au LIB pour que le linker MSVC trouve libcrypto.lib et libssl.lib
-          echo "LIB=$env:LIB;$libDir" >> $env:GITHUB_ENV
-          echo "=== Final lib dir contents ==="
-          Get-ChildItem $libDir -Filter "*.lib" | ForEach-Object { echo $_.Name }
-
-      - name: Build and Publish Release
+      - name: Build and Publish Tauri Application
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: app-v__VERSION__ # Crée automatiquement un tag Git
+          tagName: v__VERSION__
           releaseName: "DeFuDoLog v__VERSION__"
-          releaseBody: "Release officielle de DeFuDoLog v__VERSION__. Téléchargez l'installeur correspondant à votre système ci-dessous."
-          releaseDraft: true
+          releaseBody: "✨ Mise à jour automatique OTA de DeFuDoLog v__VERSION__ avec persistance garantie des données SQLite."
+          releaseDraft: false
           prerelease: false
-
-      - name: Upload Build Artifacts (Backup)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: defudolog-binaries-${{ matrix.platform }}
-          path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
-          if-no-files-found: ignore
+          args: ${{ matrix.args }}

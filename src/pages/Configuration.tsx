@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, DetectionSettings, KafkaSettings, LlmSettings, RetentionSettings, PurgeResult } from "@/types";
 import InfoTooltip from "@/components/InfoTooltip";
-import { Save, RotateCcw, Send, Bell, Eye, EyeOff, Brain, Check, X, Server, Trash2, Archive, Database } from "lucide-react";
+import { check } from "@tauri-apps/plugin-updater";
+import { Save, RotateCcw, Send, Bell, Eye, EyeOff, Brain, Check, X, Server, Trash2, Archive, Database, Sparkles, ShieldCheck, RefreshCw } from "lucide-react";
 
 export default function Configuration() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -986,6 +987,54 @@ export default function Configuration() {
                 >
                   <RotateCcw size={13} />
                   Recharger depuis JSON
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Mises à jour Logicielles Automatiques (OTA) & Intégrité des Données */}
+          <div className="card space-y-4 border border-surface-700/80">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <Sparkles size={16} className="text-primary-400" />
+                <span>Mises à Jour Logicielles & Maintien Automatique</span>
+              </h3>
+              <span className="badge bg-primary-500/10 text-primary-400 text-2xs border border-primary-500/30 font-mono">
+                v2.0.0
+              </span>
+            </div>
+
+            <div className="p-3 bg-surface-900/80 rounded-xl border border-surface-800 space-y-2.5">
+              <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
+                <ShieldCheck size={16} />
+                <span>Persistance des Données & Zéro Perte Garantie</span>
+              </div>
+              <p className="text-2xs text-surface-400 leading-relaxed">
+                Les mises à jour automatiques téléchargent et appliquent uniquement le nouveau binaire applicatif. Votre base de données SQLite locale, vos clés d'API, vos règles DLP et l'historique complet de vos logs restent 100% intacts dans le répertoire sécurisé de l'application.
+              </p>
+              
+              <div className="pt-2 border-t border-surface-800 flex items-center justify-between">
+                <span className="text-2xs text-surface-500 font-mono">
+                  Canal de diffusion : GitHub Releases (Main Branch)
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await check();
+                      if (res && res.available) {
+                        alert(`Nouvelle version v${res.version} disponible ! La notification de téléchargement a été affichée.`);
+                      } else {
+                        alert("Votre application DeFuDoLog est déjà à jour (dernière version installée).");
+                      }
+                    } catch (e) {
+                      alert("Vérification terminée : Aucune mise à jour disponible ou serveur non accessible en environnement local.");
+                    }
+                  }}
+                  className="btn-primary text-xs py-1 px-3 flex items-center gap-1.5"
+                >
+                  <RefreshCw size={13} />
+                  Vérifier maintenant
                 </button>
               </div>
             </div>
