@@ -142,6 +142,8 @@ impl SyslogServer {
             raw_message: message.clone(),
             log_hash,
             meaning: None,
+            explanation: None,
+            recommendation: None,
             timestamp: Utc::now(),
             ingested_at: Utc::now(),
         };

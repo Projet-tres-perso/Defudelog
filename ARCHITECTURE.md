@@ -1,10 +1,11 @@
-# DeFuDoLog v2.1 — Architecture Document
+# DeFuDoLog v2.3 — Architecture Document
 
 ## 1. Vision & Objectifs
 
-**DeFuDoLog v2.1** est une plateforme native de détection de fuites de données (Data Leak Prevention - DLP), de gestion des événements de sécurité (SIEM/SOAR) et de surveillance réseau distribuée.
+**DeFuDoLog v2.3** est une plateforme native de détection de fuites de données (Data Leak Prevention - DLP), de gestion des événements de sécurité (SIEM/SOAR), d'interprétation sémantique multi-niveaux et de surveillance réseau distribuée.
 
-Elle résout les limitations historiques des systèmes à base de règles statiques grâce à un **moteur de détection multi-axes parallélisé** combinant :
+Elle résout les limitations historiques des systèmes à base de règles statiques grâce à :
+- **Un Moteur Sémantique Multi-Niveaux & Rétroaction $O(1)$** : Décodage en 3 volets (*Sens Métier Immédiat*, *Explication Didactique Détaillée*, *Recommandation SOC*), variables nommées typées (`{user}`, `{ip}`, `{port}`...), tolérance floue Jaccard, persistance SQLite des surcharges utilisateur et mise à jour OTA sans recompilation.
 - **L'analyse déterministe DLP** sans latence (mots-clés, regex pré-compilées, PII, secrets, règles SQLite).
 - **Le Log Mining structural (Drain)** avec classification de templates et détection de Zero-Day.
 - **La sémantique vectorielle dense (ONNX / BGE embeddings)** et similarité cosinus avec des profils de menaces.

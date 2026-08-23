@@ -45,8 +45,19 @@ export interface RawLog {
   raw_message: string;
   log_hash: string;
   meaning?: string | null;
+  explanation?: string | null;
+  recommendation?: string | null;
   timestamp: string;
   ingested_at: string;
+}
+
+export interface TranslationRule {
+  category?: string;
+  pattern: string;
+  template_format: string;
+  explanation?: string;
+  recommendation?: string;
+  status_level: "success" | "info" | "warning" | "error" | string;
 }
 
 export interface ParsedLog {

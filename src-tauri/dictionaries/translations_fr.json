@@ -3,66 +3,88 @@
     "category": "SSH & Authentification Linux",
     "pattern": "accepted password for",
     "template_format": "🟢 Connexion SSH réussie par mot de passe pour l'utilisateur '{user}' depuis l'adresse IP {ip} (port {port}).",
+    "explanation": "Une session SSH interactive a été ouverte après validation du mot de passe de l'utilisateur.",
+    "recommendation": "Assurez-vous que la connexion provient d'un poste autorisé. Pour durcir le serveur, privilégiez l'authentification par clé SSH plutôt que par mot de passe.",
     "status_level": "success"
   },
   {
     "category": "SSH & Authentification Linux",
     "pattern": "accepted publickey for",
     "template_format": "🟢 Connexion SSH réussie par clé cryptographique pour l'utilisateur '{user}' depuis l'IP {ip}.",
+    "explanation": "L'utilisateur s'est authentifié avec succès via sa clé publique RSA/Ed25519 (méthode d'authentification recommandée).",
+    "recommendation": "Aucune action requise (authentification sécurisée conforme).",
     "status_level": "success"
   },
   {
     "category": "SSH & Authentification Linux",
     "pattern": "failed password for invalid user",
     "template_format": "🔴 Alerte Intrusion : Tentative de connexion SSH avec mot de passe incorrect sur un compte inexistant '{user}' depuis l'IP suspecte {ip}.",
+    "explanation": "Un attaquant distant teste des identifiants au hasard ou utilise un dictionnaire de comptes par défaut (attaque par dictionnaire / force brute).",
+    "recommendation": "Bannissez immédiatement l'adresse IP source {ip} au niveau du pare-feu et activez Fail2Ban.",
     "status_level": "error"
   },
   {
     "category": "SSH & Authentification Linux",
     "pattern": "failed password for",
     "template_format": "🔴 Échec d'authentification SSH : Mot de passe invalide saisi pour le compte '{user}' depuis l'IP {ip}.",
+    "explanation": "Une tentative de connexion a échoué car le mot de passe renseigné est incorrect pour ce compte existant.",
+    "recommendation": "Vérifiez si l'utilisateur légitime a fait une erreur ou s'il s'agit d'une tentative de devinette de mot de passe (Password Spraying).",
     "status_level": "error"
   },
   {
     "category": "Sessions & Système",
     "pattern": "session opened for user",
     "template_format": "ℹ️ Ouverture d'une session système pour le compte '{user}'.",
+    "explanation": "Le gestionnaire de sessions PAM a initialisé un nouvel environnement utilisateur.",
+    "recommendation": "Journalisation standard de traçabilité.",
     "status_level": "info"
   },
   {
     "category": "Sessions & Système",
     "pattern": "session closed for user",
     "template_format": "ℹ️ Déconnexion et fermeture de session pour l'utilisateur '{user}'.",
+    "explanation": "La session utilisateur a été libérée proprement par PAM.",
+    "recommendation": "Information d'audit standard.",
     "status_level": "info"
   },
   {
     "category": "Réseau Distant",
     "pattern": "connection closed by",
     "template_format": "ℹ️ La connexion réseau distante a été fermée par l'hôte {ip}.",
+    "explanation": "Le client distant a interrompu la session TCP.",
+    "recommendation": "Aucune action requise.",
     "status_level": "info"
   },
   {
     "category": "Réseau Distant",
     "pattern": "disconnected from",
     "template_format": "ℹ️ Déconnexion normale de l'hôte distant {ip}.",
+    "explanation": "Fermeture ordonnée de la liaison réseau.",
+    "recommendation": "Aucune action requise.",
     "status_level": "info"
   },
   {
     "category": "Élévation de Privilèges",
     "pattern": "command=",
     "template_format": "⚠️ Élévation de privilèges (sudo) : L'utilisateur '{user}' a exécuté la commande avec droits administrateur : '{cmd}'.",
+    "explanation": "L'utilisateur a invoqué des privilèges 'root' pour exécuter une commande administrative sensible.",
+    "recommendation": "Vérifiez la légitimité de la commande '{cmd}' par rapport aux responsabilités assignées à cet utilisateur.",
     "status_level": "warning"
   },
   {
     "category": "Authentification & PAM",
     "pattern": "authentication failure",
     "template_format": "🔴 Échec de vérification des droits PAM / Sudo : Mot de passe administrateur incorrect saisi par '{user}'.",
+    "explanation": "Une tentative d'authentification locale ou d'élévation de privilèges sudo a échoué.",
+    "recommendation": "Contrôlez si un utilisateur non autorisé tente d'accéder aux droits root sur la machine hôte.",
     "status_level": "error"
   },
   {
     "category": "Sécurité Système",
     "pattern": "not in sudoers file",
     "template_format": "🔴 Tentative d'accès non autorisé : L'utilisateur '{user}' a tenté d'utiliser la commande sudo sans en avoir les droits.",
+    "explanation": "Le compte utilisateur a tenté de forcer l'exécution sudo alors qu'il n'appartient pas au groupe autorisé (/etc/sudoers).",
+    "recommendation": "Alerte de sécurité : auditez les actions récentes de l'utilisateur '{user}'.",
     "status_level": "error"
   },
 
@@ -70,12 +92,16 @@
     "category": "Windows - Authentification & Sessions",
     "pattern": "eventid=4624",
     "template_format": "🟢 Connexion Windows validée (EventID 4624) pour l'utilisateur '{user}' sur la session active.",
+    "explanation": "Un compte s'est connecté avec succès sur l'ordinateur Windows ou le contrôleur de domaine Active Directory.",
+    "recommendation": "Vérifiez le type d'ouverture de session (LogonType 2=Interactif local, 3=Réseau/SMB, 10=RDP à distance).",
     "status_level": "success"
   },
   {
     "category": "Windows - Authentification & Sessions",
     "pattern": "eventid=4625",
     "template_format": "🔴 Échec de connexion Windows (EventID 4625) : Identifiant ou mot de passe incorrect pour le compte '{user}'.",
+    "explanation": "Une tentative d'ouverture de session Windows a échoué. Des échecs en rafale signalent une tentative de force brute ou un spray de mots de passe NTLM/Kerberos.",
+    "recommendation": "Surveillez si le compte '{user}' est verrouillé (EventID 4740) et inspectez l'adresse IP source du client.",
     "status_level": "error"
   },
   {

@@ -49,16 +49,24 @@ impl ActiveResponseEngine {
 
             log::warn!("🔥 SOAR: Exécution du script PowerShell de mitigation: {:?}", script_path);
 
-            Command::new("powershell.exe")
+            let mut cmd = Command::new("powershell.exe");
+            cmd.arg("-WindowStyle")
+                .arg("Hidden")
                 .arg("-NoProfile")
                 .arg("-ExecutionPolicy")
                 .arg("Bypass")
                 .arg("-File")
                 .arg(&script_path)
                 .arg(arg1)
-                .arg(arg2)
-                .spawn()
-                .map_err(AppError::Io)?;
+                .arg(arg2);
+
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
+
+            cmd.spawn().map_err(AppError::Io)?;
         } else {
             script_path.push("defudolog_active_response.sh");
             std::fs::write(&script_path, script_content)

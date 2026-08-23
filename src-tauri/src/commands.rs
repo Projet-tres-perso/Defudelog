@@ -620,11 +620,14 @@ pub fn get_templates(state: State<'_, AppState>, page: Option<usize>, per_page: 
 
 #[tauri::command]
 pub fn check_is_admin() -> Result<bool, String> {
-    let current_os = std::env::consts::OS;
-    if current_os == "windows" {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         // Test non destructif via net session pour vérifier l'élévation UAC sous Windows
         let output = std::process::Command::new("net")
             .arg("session")
+            .creation_flags(CREATE_NO_WINDOW)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .output();
@@ -632,17 +635,15 @@ pub fn check_is_admin() -> Result<bool, String> {
             Ok(out) => Ok(out.status.success()),
             Err(_) => Ok(false),
         }
-    } else {
-        // Unix (macOS / Linux) : UID == 0 pour root
-        #[cfg(unix)]
-        {
-            let uid = unsafe { libc::geteuid() };
-            Ok(uid == 0)
-        }
-        #[cfg(not(unix))]
-        {
-            Ok(false)
-        }
+    }
+    #[cfg(unix)]
+    {
+        let uid = unsafe { libc::geteuid() };
+        Ok(uid == 0)
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        Ok(false)
     }
 }
 
@@ -652,24 +653,32 @@ pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| format!("Impossible d'obtenir le chemin de l'exécutable: {}", e))?;
     let exe_path = current_exe.to_string_lossy().to_string();
 
-    let current_os = std::env::consts::OS;
-    if current_os == "windows" {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         let ps_cmd = format!(
             "Start-Process -FilePath '{}' -Verb RunAs",
             exe_path.replace('\'', "''")
         );
         let _ = std::process::Command::new("powershell")
+            .arg("-WindowStyle")
+            .arg("Hidden")
             .arg("-NoProfile")
             .arg("-NonInteractive")
             .arg("-Command")
             .arg(&ps_cmd)
+            .creation_flags(CREATE_NO_WINDOW)
             .spawn()
             .map_err(|e| format!("Erreur lors de la demande d'élévation UAC: {}", e))?;
         
         // Quitter l'instance non élevée
         app.exit(0);
-        Ok(())
-    } else if current_os == "macos" || current_os == "darwin" {
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
         let osa_cmd = format!(
             "do shell script \"open '{}'\" with administrator privileges",
             exe_path
@@ -680,16 +689,22 @@ pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Erreur élévation macOS: {}", e))?;
         app.exit(0);
-        Ok(())
-    } else {
+        return Ok(());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
         // Linux : pkexec
         let _ = std::process::Command::new("pkexec")
             .arg(&exe_path)
             .spawn()
             .map_err(|e| format!("Erreur pkexec: {}", e))?;
         app.exit(0);
-        Ok(())
+        return Ok(());
     }
+
+    #[allow(unreachable_code)]
+    Ok(())
 }
 
 #[tauri::command]
@@ -709,7 +724,7 @@ pub fn update_log_source_priority(
 #[tauri::command]
 pub fn get_template_translations(
     state: State<'_, AppState>,
-) -> Result<Vec<(String, String, String)>, String> {
+) -> Result<Vec<crate::translator::CustomTranslationTuple>, String> {
     state.db.get_all_template_translations().map_err(|e| e.to_string())
 }
 
@@ -718,6 +733,8 @@ pub fn save_template_translation(
     state: State<'_, AppState>,
     template_pattern: String,
     french_format: String,
+    explanation: Option<String>,
+    recommendation: Option<String>,
     status_level: String,
 ) -> Result<(), String> {
     let hash = {
@@ -731,13 +748,15 @@ pub fn save_template_translation(
         template_hash: hash,
         template_pattern: template_pattern.clone(),
         french_format: french_format.clone(),
+        explanation: explanation.clone(),
+        recommendation: recommendation.clone(),
         status_level: status_level.clone(),
         learned_from: "user_custom".to_string(),
         created_at: chrono::Utc::now(),
     };
 
     state.db.save_template_translation(&translation).map_err(|e| e.to_string())?;
-    state.translator.load_custom_translations(vec![(template_pattern, french_format, status_level)]);
+    state.translator.insert_custom_translation(&template_pattern, &french_format, explanation, recommendation, &status_level);
     Ok(())
 }
 
@@ -762,5 +781,16 @@ pub fn load_custom_translation_file(
 ) -> Result<usize, String> {
     let path = std::path::Path::new(&file_path);
     state.translator.load_from_file(path)
+}
+
+#[tauri::command]
+pub async fn sync_remote_dictionary(
+    state: State<'_, AppState>,
+    url: Option<String>,
+) -> Result<usize, String> {
+    let target_url = url.unwrap_or_else(|| {
+        "https://raw.githubusercontent.com/Projet-tres-perso/Defudelog/main/src-tauri/dictionaries/translations_fr.json".to_string()
+    });
+    state.translator.sync_remote_dictionary(&target_url).await
 }
 

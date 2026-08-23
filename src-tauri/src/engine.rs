@@ -772,6 +772,8 @@ impl DetectionPipeline {
             raw_message: raw_message.to_string(),
             log_hash: log_hash.clone(),
             meaning: None,
+            explanation: None,
+            recommendation: None,
             timestamp,
             ingested_at: Utc::now(),
         };

@@ -208,6 +208,7 @@ pub fn run() {
             commands::get_translation_dictionary_rules,
             commands::reload_translation_dictionary,
             commands::load_custom_translation_file,
+            commands::sync_remote_dictionary,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DeFuDoLog");
