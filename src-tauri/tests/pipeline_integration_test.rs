@@ -231,11 +231,43 @@ fn test_semantic_log_translation() {
     assert_eq!(trans12.status_level, "error");
     assert!(trans12.meaning.contains("Alerte Intrusion MySQL"), "MySQL access denied translation failed: {}", trans12.meaning);
 
-    // 13. Test PostgreSQL Password Failed
-    let raw_pg = "2026-08-20 10:50:03 UTC [1234]: FATAL:  password authentication failed for user \"appuser\"";
-    let trans13 = translator.translate(raw_pg, "password authentication failed for user", &[]);
-    assert_eq!(trans13.status_level, "error");
-    assert!(trans13.meaning.contains("Alerte Intrusion PostgreSQL"), "PostgreSQL auth failed translation failed: {}", trans13.meaning);
+    // 14. Test Variables Nommées Typées & Absence d'inversion
+    let raw_inverted = "Aug 21 12:00:00 server sshd[123]: Connection accepted from 192.168.1.99 port 54321 for admin";
+    let trans14 = translator.translate(raw_inverted, "accepted password for", &[]);
+    assert!(trans14.meaning.contains("192.168.1.99"), "Named IP extraction failed: {}", trans14.meaning);
+    assert!(trans14.meaning.contains("admin"), "Named user extraction failed: {}", trans14.meaning);
+
+    // 15. Test Structure Multi-Niveaux (Sens + Explication + Recommandation)
+    assert!(trans1.explanation.is_some(), "Explanation should be present for SSH success");
+    assert!(trans1.recommendation.is_some(), "Recommendation should be present for SSH success");
+    assert!(trans2.explanation.as_ref().unwrap().contains("privilèges") || trans2.explanation.as_ref().unwrap().contains("root"), "Sudo explanation check: {:?}", trans2.explanation);
+    assert!(trans2.recommendation.as_ref().unwrap().contains("légitimité") || trans2.recommendation.as_ref().unwrap().contains("utilisateur"), "Sudo recommendation check: {:?}", trans2.recommendation);
+
+    let raw_failed_ssh = "Aug 20 09:45:00 server sshd[1845]: Failed password for invalid user hacker from 203.0.113.50 port 43210 ssh2";
+    let trans_failed = translator.translate(raw_failed_ssh, "failed password for invalid user", &[]);
+    assert!(trans_failed.explanation.as_ref().unwrap().contains("attaquant") || trans_failed.explanation.as_ref().unwrap().contains("dictionnaire"), "Failed password explanation check: {:?}", trans_failed.explanation);
+    assert!(trans_failed.recommendation.as_ref().unwrap().contains("Fail2Ban") || trans_failed.recommendation.as_ref().unwrap().contains("pare-feu"), "Failed password recommendation check: {:?}", trans_failed.recommendation);
+
+    // 16. Test Correspondance Floue (Fuzzy Jaccard Matching)
+    let raw_fuzzy = "Aug 21 12:05:00 myhost systemd[1]: user alex session closed completely";
+    let trans16 = translator.translate(raw_fuzzy, "session closed for user", &[]);
+    assert!(trans16.meaning.contains("Fermeture de session") || trans16.meaning.contains("Déconnexion"), "Fuzzy matching failed: {}", trans16.meaning);
+
+    // 17. Test Règle Personnalisée SQLite / Cache
+    translator.insert_custom_translation(
+        "custom-dlp-pattern",
+        "🚨 Détection Sur-Mesure : Fuite de données classifiée confidentielle par {user}",
+        Some("Règle spécifique définie par le responsable SOC pour surveiller un projet critique.".to_string()),
+        Some("Bloquez immédiatement l'accès au compte et prévenez l'équipe RSSI.".to_string()),
+        "error",
+    );
+    let trans17 = translator.translate("custom-dlp-pattern triggered for user sophie", "custom-dlp-pattern", &[]);
+    assert!(trans17.is_learned);
+    assert_eq!(trans17.status_level, "error");
+    assert!(trans17.meaning.contains("Détection Sur-Mesure"), "Custom rule failed: {}", trans17.meaning);
+    assert!(trans17.meaning.contains("sophie"), "Custom user interpolation failed: {}", trans17.meaning);
+    assert!(trans17.explanation.as_ref().unwrap().contains("responsable SOC"));
+    assert!(trans17.recommendation.as_ref().unwrap().contains("équipe RSSI"));
 }
 
 

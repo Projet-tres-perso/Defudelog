@@ -124,7 +124,11 @@ pub struct RawLog {
     pub raw_message: String,
     pub log_hash: String,
     #[serde(default)]
-    pub meaning: Option<String>, // Sens métier en français
+    pub meaning: Option<String>, // Sens métier court en français
+    #[serde(default)]
+    pub explanation: Option<String>, // Explication didactique détaillée
+    #[serde(default)]
+    pub recommendation: Option<String>, // Action recommandée pour l'analyste
     pub timestamp: DateTime<Utc>,
     pub ingested_at: DateTime<Utc>,
 }
@@ -135,6 +139,10 @@ pub struct TemplateTranslation {
     pub template_hash: String,
     pub template_pattern: String,
     pub french_format: String,
+    #[serde(default)]
+    pub explanation: Option<String>,
+    #[serde(default)]
+    pub recommendation: Option<String>,
     pub status_level: String,
     pub learned_from: String,
     pub created_at: DateTime<Utc>,

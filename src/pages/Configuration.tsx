@@ -978,7 +978,7 @@ export default function Configuration() {
                   onClick={async () => {
                     try {
                       const count = await invoke<number>("reload_translation_dictionary");
-                      alert(`Dictionnaire rechargé avec succès (${count} règles actives) !`);
+                      alert(`Dictionnaire local rechargé avec succès (${count} règles actives) !`);
                     } catch (e) {
                       alert("Erreur lors du rechargement: " + String(e));
                     }
@@ -987,6 +987,22 @@ export default function Configuration() {
                 >
                   <RotateCcw size={13} />
                   Recharger depuis JSON
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const count = await invoke<number>("sync_remote_dictionary", { url: null });
+                      alert(`Synchronisation OTA réussie ! ${count} règles sémantiques téléchargées et activées.`);
+                    } catch (e) {
+                      alert("Erreur lors de la synchronisation distante: " + String(e));
+                    }
+                  }}
+                  className="btn-primary text-xs flex items-center gap-1.5"
+                >
+                  <RefreshCw size={13} />
+                  Mettre à jour depuis GitHub (OTA)
                 </button>
               </div>
             </div>

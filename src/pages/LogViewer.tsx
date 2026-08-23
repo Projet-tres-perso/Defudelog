@@ -15,6 +15,14 @@ export default function LogViewer() {
   const [loading, setLoading] = useState(false);
   const perPage = 50;
 
+  // États du modal d'édition sémantique
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editPattern, setEditPattern] = useState("");
+  const [editFormat, setEditFormat] = useState("");
+  const [editExplanation, setEditExplanation] = useState("");
+  const [editRecommendation, setEditRecommendation] = useState("");
+  const [editLevel, setEditLevel] = useState("info");
+
   const fetchSources = async () => {
     try {
       const srcList = await invoke<LogSource[]>("list_log_sources");
@@ -316,14 +324,57 @@ export default function LogViewer() {
             </div>
             
             <div className="space-y-4">
-              {/* Sens Métier & Détail */}
-              <div className="bg-surface-800/40 p-3 rounded-xl border border-surface-700/60 space-y-2">
-                <span className="text-3xs text-primary-400 uppercase font-bold tracking-wider">
-                  Interprétation Sémantique
-                </span>
-                <p className="text-xs text-white leading-relaxed font-medium">
+              {/* Sens Métier & Détail Multi-Niveaux */}
+              <div className="bg-surface-800/40 p-3 rounded-xl border border-surface-700/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-3xs text-primary-400 uppercase font-bold tracking-wider">
+                    1. Sens Métier Immédiat
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditPattern(selectedRawLog.raw_message);
+                      setEditFormat(selectedRawLog.meaning || selectedRawLog.raw_message);
+                      setEditExplanation(selectedRawLog.explanation || "");
+                      setEditRecommendation(selectedRawLog.recommendation || "");
+                      setEditLevel("info");
+                      setShowEditModal(true);
+                    }}
+                    className="text-3xs px-2 py-0.5 rounded bg-primary-600/20 text-primary-300 hover:bg-primary-600/30 border border-primary-500/30 font-medium transition-all"
+                    title="Personnaliser ou corriger l'interprétation de ce log"
+                  >
+                    ✏️ Modifier
+                  </button>
+                </div>
+                
+                <p className="text-xs text-white leading-relaxed font-semibold">
                   {selectedRawLog.meaning || selectedRawLog.raw_message}
                 </p>
+
+                {/* 2. Explication Didactique Approfondie */}
+                {selectedRawLog.explanation && (
+                  <div className="pt-2 border-t border-surface-700/40 space-y-1">
+                    <span className="text-3xs text-surface-400 uppercase font-semibold">
+                      2. Explication Didactique
+                    </span>
+                    <p className="text-2xs text-surface-300 leading-relaxed font-sans bg-surface-900/60 p-2 rounded-lg border border-surface-800">
+                      💡 {selectedRawLog.explanation}
+                    </p>
+                  </div>
+                )}
+
+                {/* 3. Recommandation SOC / Action Opérationnelle */}
+                {selectedRawLog.recommendation && (
+                  <div className="pt-2 border-t border-surface-700/40 space-y-1">
+                    <span className="text-3xs text-emerald-400 uppercase font-semibold">
+                      3. Action & Recommandation SOC
+                    </span>
+                    <p className="text-2xs text-emerald-200/90 leading-relaxed font-sans bg-emerald-950/40 p-2 rounded-lg border border-emerald-800/40">
+                      🛡️ {selectedRawLog.recommendation}
+                    </p>
+                  </div>
+                )}
+
                 <div className="pt-2 border-t border-surface-700/40 text-2xs text-surface-400 font-mono space-y-1">
                   <div>Machine : <span className="text-surface-200">{selectedRawLog.hostname}</span></div>
                   <div>Horodatage : <span className="text-surface-200">{new Date(selectedRawLog.timestamp).toLocaleString("fr-FR")}</span></div>
@@ -371,6 +422,113 @@ export default function LogViewer() {
           </div>
         )}
       </div>
+
+      {/* Modal d'Édition Personnalisée de l'Interprétation */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-surface-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-surface-900 border border-surface-700 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-surface-800 pb-3">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <span>✏️ Personnaliser l'Interprétation Sémantique</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="text-surface-500 hover:text-white text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-3xs text-surface-400 uppercase font-semibold mb-1">Motif de journal (Pattern)</label>
+                <input
+                  type="text"
+                  className="input font-mono text-2xs w-full"
+                  value={editPattern}
+                  onChange={(e) => setEditPattern(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-3xs text-surface-400 uppercase font-semibold mb-1">1. Sens Métier Court (Gabarit avec variables : &#123;user&#125;, &#123;ip&#125;, &#123;port&#125;...)</label>
+                <textarea
+                  className="input text-xs w-full h-16 resize-none"
+                  value={editFormat}
+                  onChange={(e) => setEditFormat(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-3xs text-surface-400 uppercase font-semibold mb-1">2. Explication Didactique Détaillée (Optionnel)</label>
+                <textarea
+                  className="input text-xs w-full h-14 resize-none"
+                  placeholder="Détaillez la cause technique et le contexte métier de cet événement..."
+                  value={editExplanation}
+                  onChange={(e) => setEditExplanation(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-3xs text-surface-400 uppercase font-semibold mb-1">3. Action / Recommandation SOC (Optionnel)</label>
+                <textarea
+                  className="input text-xs w-full h-14 resize-none"
+                  placeholder="Conseils de remédiation, règles pare-feu à appliquer..."
+                  value={editRecommendation}
+                  onChange={(e) => setEditRecommendation(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-3xs text-surface-400 uppercase font-semibold mb-1">Niveau d'état visuel</label>
+                <select
+                  className="input text-xs w-full"
+                  value={editLevel}
+                  onChange={(e) => setEditLevel(e.target.value)}
+                >
+                  <option value="info">🔵 Information (Normal)</option>
+                  <option value="success">🟢 Succès (Validation)</option>
+                  <option value="warning">⚠️ Avertissement (Suspicion)</option>
+                  <option value="error">🔴 Erreur / Alerte Critique</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-surface-800 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="btn-secondary text-xs"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await invoke("save_template_translation", {
+                      templatePattern: editPattern,
+                      frenchFormat: editFormat,
+                      explanation: editExplanation.trim() ? editExplanation : null,
+                      recommendation: editRecommendation.trim() ? editRecommendation : null,
+                      statusLevel: editLevel,
+                    });
+                    setShowEditModal(false);
+                    fetchLogs();
+                    alert("Interprétation personnalisée enregistrée avec succès dans votre base SQLite !");
+                  } catch (e) {
+                    alert("Erreur lors de l'enregistrement: " + String(e));
+                  }
+                }}
+                className="btn-primary text-xs"
+              >
+                Enregistrer la règle
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

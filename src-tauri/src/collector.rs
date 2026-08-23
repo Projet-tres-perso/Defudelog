@@ -295,10 +295,18 @@ impl LogCollector {
             );
 
             let mut init_cmd = std::process::Command::new("powershell");
-            init_cmd.arg("-NoProfile")
+            init_cmd.arg("-WindowStyle")
+                .arg("Hidden")
+                .arg("-NoProfile")
                 .arg("-NonInteractive")
                 .arg("-Command")
                 .arg(&init_script);
+
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                init_cmd.creation_flags(0x08000000);
+            }
 
             if let Ok(output) = init_cmd.output() {
                 if !output.status.success() {
@@ -333,11 +341,19 @@ impl LogCollector {
             );
 
             let mut cmd = std::process::Command::new("powershell");
-            cmd.arg("-NoProfile")
+            cmd.arg("-WindowStyle")
+                .arg("Hidden")
+                .arg("-NoProfile")
                 .arg("-NonInteractive")
                 .arg("-Command")
                 .arg(&loop_script)
                 .stdout(std::process::Stdio::piped());
+
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
 
             match cmd.spawn() {
                 Ok(mut child) => {
@@ -388,7 +404,7 @@ impl LogCollector {
         let now = Utc::now();
 
         // 1. Calcul du Sens Métier en français vulgarisé
-        let meaning = if let Some(tr) = translator {
+        let (meaning, explanation, recommendation) = if let Some(tr) = translator {
             let (tpl, params) = if let Some(engine_lock) = engine {
                 let mut eng = engine_lock.lock();
                 let parsed = eng.parse_log_structure(line);
@@ -397,9 +413,9 @@ impl LogCollector {
                 (line.to_string(), Vec::new())
             };
             let trans = tr.translate(line, &tpl, &params);
-            Some(trans.meaning)
+            (Some(trans.meaning), trans.explanation, trans.recommendation)
         } else {
-            None
+            (None, None, None)
         };
 
         let raw_log = RawLog {
@@ -409,6 +425,8 @@ impl LogCollector {
             raw_message: line.to_string(),
             log_hash,
             meaning,
+            explanation,
+            recommendation,
             timestamp: now,
             ingested_at: now,
         };

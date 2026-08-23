@@ -1,10 +1,10 @@
-# Manuel Pédagogique et Technique Approfondi — DeFuDoLog v2.1
+# Manuel Pédagogique et Technique Approfondi — DeFuDoLog v2.3
 
-Ce manuel s'adresse aux ingénieurs, analystes SOC, administrateurs et chercheurs en cybersécurité souhaitant maîtriser le fonctionnement, l'architecture logicielle, les capacités d'intégration réseau et le pipeline de détection de la plateforme **DeFuDoLog v2.1**.
+Ce manuel s'adresse aux ingénieurs, analystes SOC, administrateurs et chercheurs en cybersécurité souhaitant maîtriser le fonctionnement, l'architecture logicielle, les capacités d'intégration réseau, le moteur sémantique multi-niveaux et le pipeline de détection de la plateforme **DeFuDoLog v2.3**.
 
 ---
 
-## 1. Introduction : La Problématique des Fuites de Données (DLP)
+## 1. Introduction : La Problématique des Fuites de Données (DLP) & Compréhension Sémantique
 
 Les fuites de données (*Data Exfiltration / Data Leakage*) constituent la menace la plus destructrice pour les organisations. Elles résultent de deux vecteurs majeurs :
 1. **Attaques externes ciblées (APT)** : Compromission d'identifiants, élévation de privilèges, exfiltration discrète vers des buckets Cloud ou des serveurs C2.
@@ -13,41 +13,47 @@ Les fuites de données (*Data Exfiltration / Data Leakage*) constituent la menac
 ### Pourquoi les approches traditionnelles échouent-elles ?
 * **L'approche par règles rigides (SIEM classique)** (*"Alerte si > 500 Mo transférés"*) est systématiquement contournée par l'exfiltration lente et fractionnée (*Low & Slow*).
 * **L'approche par Machine Learning isolé en boîte noire** génère un taux de faux positifs intolérable et n'explique pas le contexte de l'incident à l'analyste SOC.
-* **Les architectures séquentielles naïves** créent des goulots d'étranglement et perdent l'information si une seule étape de parsing échoue.
+* **L'obscurité des logs bruts** : La prolifération de syntaxes hétérogènes (EventID Windows, TCC macOS, NGINX, PAM) ralentit l'investigation humaine.
 
 ---
 
-## 2. Architecture Globale du Pipeline Multi-Couche & Traduction Sémantique
+## 2. Moteur Sémantique Enrichi & Multi-Niveaux (v2.3)
+
+Le moteur sémantique de **DeFuDoLog v2.3** repose sur 5 piliers :
 
 ```
-                                      [ Log Brut Ingesté ]
-                                               │
-               ┌───────────────────────────────┴───────────────────────────────┐
-               ▼                                                               ▼
-[ Moteur de Traduction Sémantique O(1) ]                     [ Pipeline de Détection Multi-Axes ]
-  • Dictionnaire Expert (Linux, Win, Web, Net)                 ├──> AXE 1 : DLP Déterministe (Regex O(1))
-  • Extraction Drain & Interpolation Variables                 ├──> AXE 2 : Drain Structural & Zero-Day
-  • Apprentissage Asynchrone via LLM                           ├──> AXE 3 : Sémantique BGE (FastEmbed)
-  • "Sens Métier" en Français Clair (🟢 🔴 ⚠️ ℹ️)              ├──> AXE 4 : HDBSCAN Outlier Scoring
-               │                                               └──> AXE 5 : Corrélation Temporelle
-               ▼                                                               │
-┌──────────────────────────────┐                                               ▼
-│ MODES D'AFFICHAGE MODULABLES │                                    [ Fusion Score Composite ]
-│ • 👁️ Vue Hybride (Brut + Sens)│                                               │
-│ • 📖 Vue Vulgarisée (Sens seul)│                                              ▼
-└──────────────────────────────┘                                     [ Arbitrage Contextuel SOC LLM ]
-                                                                               │
-                                                       ┌───────────────────────┴───────────────────────┐
-                                                       ▼                                               ▼
-                                            [ Kafka Outbound Stream ]                        [ Alertes SIEM & SOAR ]
+                                  [ Log Brut Ingesté ]
+                                           │
+          ┌────────────────────────────────┴────────────────────────────────┐
+          ▼                                                                 ▼
+[ Moteur Sémantique Multi-Niveaux O(1) ]                [ Pipeline de Détection Multi-Axes ]
+  ├── 1. Sens Métier Immédiat                             ├──> AXE 1 : DLP Déterministe (Regex O(1))
+  ├── 2. Explication Didactique Approfondie               ├──> AXE 2 : Drain Structural & Zero-Day
+  ├── 3. Recommandation Opérationnelle SOC                ├──> AXE 3 : Sémantique BGE (FastEmbed)
+  ├── 🎯 Variables Nommées Typées ({user}, {ip}...)      ├──> AXE 4 : HDBSCAN Outlier Scoring
+  ├── 🔍 Tolérance Floue (Token Jaccard >= 0.70)          └──> AXE 5 : Corrélation Temporelle
+  ├── ✏️ Rétroaction en 1 Clic (SQLite Persistance)                         │
+  └── 🌐 Synchronisation OTA du Dictionnaire                                ▼
+          │                                                      [ Arbitrage Contextuel LLM ]
+          ▼                                                                 │
+┌──────────────────────────────┐                                            ▼
+│ VUES LOGVIEWER DÉTAILLÉES    │                                  [ Alertes SIEM & SOAR ]
+│ • Mode Vulgarisé / Hybride   │
+│ • Volet d'Investigation SOC  │
+└──────────────────────────────┘
 ```
 
-### Justification des Choix Technologiques
-1. **Traducteur Sémantique Déterministe ($O(1)$ à 0% CPU)** : Traduction instantanée des journaux techniques en phrases compréhensibles par tout collaborateur, par substitution des variables réelles (IP, Utilisateur, Port, Service) sans risque d'hallucination.
-2. **HDBSCAN + Outlier Scoring** : Détection sans paramètre $\epsilon$ rigide, calcul de distance mutuelle de reachability et score GLOSH.
-3. **FastEmbed & ONNX Runtime (Rust)** : Inférence vectorielle locale en **< 1.5 ms par log** (< 80 Mo de RAM, pas de runtime Python).
-4. **Isolation par Source & Machine** : Traitement et filtrage individualisé de chaque entité (`PC1`, `Serveur-Web`) avec priorité paramétrable (Normale, Haute 🟠, Critique 🔴).
-5. **Arbitrage Contextuel LLM (Tier-2)** : Analyse de la storyline chronologique ($\pm 10$ logs voisins) pour éliminer les faux positifs et générer des explications en langage naturel.
+### 2.1. Les 3 Niveaux d'Interprétation
+1. **Sens Métier Court (`meaning`)** : Résumé percutant en une phrase avec code visuel d'état (🟢 Succès, 🔵 Info, ⚠️ Warning, 🔴 Erreur).
+2. **Explication Didactique (`explanation`)** : Vulgarisation technique détaillée de la cause de l'événement et du contexte système.
+3. **Recommandation Opérationnelle SOC (`recommendation`)** : Guide d'action immédiat pour l'administrateur ou l'analyste de sécurité (règle pare-feu, révocation de clé, audit de compte).
+
+### 2.2. Variables Nommées Typées (Zéro Inversion)
+Les variables `{user}`, `{ip}`, `{port}`, `{file}`, `{table}`, `{status}`, `{app}`, `{domain}`, `{cmd}` sont extraites par des analyseurs syntaxiques spécialisés indépendamment de l'ordre d'apparition des champs dans la ligne de log.
+
+### 2.3. Boucle de Rétroaction & Synchronisation OTA
+- **Édition Locale en 1 Clic** : Dans l'écran `LogViewer`, l'analyste peut cliquer sur **`[✏️ Modifier]`** pour affiner l'interprétation. Les modifications sont enregistrées dans la table `template_translations` et prioritaires sur le dictionnaire de base.
+- **Mise à Jour OTA** : Dans l'écran `Configuration`, un clic sur **`[Mettre à jour depuis GitHub (OTA)]`** synchronise le catalogue sans nécessiter de redémarrage ou de recompilation.
 
 ---
 

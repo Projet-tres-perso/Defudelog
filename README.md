@@ -1,4 +1,4 @@
-# DeFuDoLog v2.2 — Data Leak Detection, Semantic SIEM & Incident Response Platform
+# DeFuDoLog v2.3 — Data Leak Detection, Semantic SIEM & Incident Response Platform
 
 [![Release](https://img.shields.io/github/v/release/Projet-tres-perso/Defudelog?style=flat-square&color=blue)](https://github.com/Projet-tres-perso/Defudelog/releases)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/Projet-tres-perso/Defudelog/release.yml?branch=main&style=flat-square)](https://github.com/Projet-tres-perso/Defudelog/actions)
@@ -6,23 +6,30 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-24C8D8?style=flat-square&logo=tauri)](https://tauri.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-**DeFuDoLog v2.2** est une plateforme de détection de fuite de données (DLP), d'analyse sémantique de journaux d'événements et de réponse aux incidents (SIEM/SOAR). Conçue en **Rust** et **Tauri/React**, elle combine une analyse multi-couches à haute cadence ($> 20\,000\text{ logs/s}$), une vulgarisation en français clair accessible aux équipes métiers, et un respect absolu de la confidentialité des données (fonctionnement 100% autonome et local).
+**DeFuDoLog v2.3** est une plateforme de détection de fuite de données (DLP), d'analyse sémantique de journaux d'événements et de réponse aux incidents (SIEM/SOAR). Conçue en **Rust** et **Tauri/React**, elle combine une analyse multi-couches à haute cadence ($> 20\,000\text{ logs/s}$), une vulgarisation sémantique multi-niveaux en français clair accessible aux équipes métiers et aux analystes SOC, et un respect absolu de la confidentialité des données (fonctionnement 100% autonome et local).
 
 ---
 
-## 🌟 Points Forts & Nouveautés Majeures
+## 🌟 Points Forts & Nouveautés Majeures (v2.3)
 
-- 📖 **Moteur de Traduction Sémantique $O(1)$** : Décode instantanément les logs bruts techniques complexes (Windows EventLog, macOS Unified Log, NGINX, Apache, MySQL, PostgreSQL, Linux) en phrases explicatives en français clair.
-- 👁️ **Modes d'Affichage Flexibles** :
-  - **Mode Hybride** : Affiche le log brut et sa signification métier en vis-à-vis.
-  - **Mode Vulgarisé (Masquer les logs bruts)** : Affiche uniquement la signification métier épurée avec code couleur par niveau de criticité.
+- 🧠 **Moteur Sémantique Enrichi & Multi-Niveaux** :
+  - **1. Sens Métier Immédiat (`meaning`)** : Résumé clair de l'événement en une phrase compréhensible par tous.
+  - **2. Explication Didactique Détaillée (`explanation`)** : Contexte technique vulgarisé expliquant la cause de l'événement.
+  - **3. Recommandation Opérationnelle SOC (`recommendation`)** : Actions immédiates suggérées pour sécuriser le poste ou le serveur.
+- 🎯 **Variables Nommées Typées & Zéro Inversion** :
+  - Extraction automatique sans inversion par expressions régulières typées : `{user}`, `{ip}`, `{port}`, `{file}`, `{table}`, `{status}`, `{app}`, `{domain}`, `{cmd}`.
+- 🔍 **Correspondance Floue (*Fuzzy Token Jaccard*)** :
+  - Tolérance aux variations mineures de syntaxe ou de versions logicielles avec calcul de similarité de Jaccard ($J \ge 0.70$).
+- ✏️ **Boucle de Rétroaction & Personnalisation Locale** :
+  - Édition et correction d'une interprétation en 1 clic directement dans l'interface, enregistrée instantanément dans la base SQLite locale (`template_translations`).
+- 🌐 **Mise à Jour OTA du Dictionnaire** :
+  - Téléchargement et synchronisation à chaud du dictionnaire sémantique depuis GitHub Releases sans recompiler l'application.
 - ⚡ **Flux Direct Haute Performance & Pagination Intelligente** :
   - Ingestion bufferisée par lots (batching à 350 ms) garantissant 60 FPS constants sans ralentissement de l'interface.
   - **Auto-Freeze** : Le flux se fige automatiquement dès que vous feuilletez les pages d'historique, avec un bouton `[🟢 Reprendre le Direct]` pour reconnecter le temps réel.
-- 🚀 **Mises à Jour Automatiques OTA (Over-The-Air)** :
-  - Détection automatique des nouvelles versions publiées sur GitHub avec pastille de notification.
-  - Mise à jour et redémarrage en 1 clic.
-  - **Zéro Perte de Données Garantie** : La base de données SQLite locale (`defudolog.db`), les règles personnalisées et les historiques sont 100% conservés.
+- 🚀 **Mises à Jour Logicielles Automatiques OTA** :
+  - Détection automatique des nouvelles versions publiées sur GitHub avec pastille lumineuse et redémarrage en 1 clic.
+  - **Zéro Perte de Données Garantie** : La base de données SQLite locale (`defudolog.db`), les règles personnalisées et les historiques restent 100% préservés.
 - 🌐 **Console Web LAN Distante Embarquée** : Accès au tableau de bord depuis n'importe quel terminal du réseau local via clé de sécurité et contrôle d'accès RBAC (Admin vs Analyste).
 - 🛡️ **DLP & Détection Multi-Axes** : Moteur déterministe par signatures, modèle ONNX BGE sémantique local, clustering HDBSCAN des anomalies et intégration LLM locale (Ollama / LM Studio).
 
@@ -38,14 +45,18 @@
   - Cliquez sur **`[🟢 Reprendre le Direct]`** pour réactiver le flux temps réel instantanément.
 - **Filtres par source** : Basculez entre les événements **💻 Locaux** et **🌐 Réseau (IP)** en un clic.
 
-### 2. 📜 Explorateur de Logs (LogViewer)
+### 2. 📜 Explorateur de Logs & Analyse Multi-Niveaux (LogViewer)
 - **Mode Sémantique / Vulgarisé** :
   - Cochez **« 👁️ Cacher les logs bruts »** pour ne lire que la vulgarisation en français clair.
   - Les badges de statut indiquent visuellement la nature de l'événement : 🟢 **Succès**, 🔵 **Information**, ⚠️ **Avertissement**, 🔴 **Critique**.
-- **Séparation par Machine / Source** :
-  - Sélectionnez un hôte spécifique dans le sélecteur de source pour isoler l'analyse d'une machine cible ou d'un serveur précis.
-- **Recherche & Filtrage** :
-  - Tapez un mot-clé (ex: `ssh`, `4625`, `SELECT`, `502`, `192.168.1.50`) pour filtrer instantanément dans les millions de logs indexés.
+- **Investigation Multi-Niveaux** :
+  - Cliquez sur n'importe quel log pour ouvrir le volet d'investigation latérale affichant :
+    1. Le **Sens Métier Immédiat**
+    2. L'**Explication Didactique Détaillée**
+    3. L'**Action & Recommandation SOC**
+    4. La **Storyline Chronologique ($\pm 10$ logs)**
+- **Personnalisation d'une Interprétation** :
+  - Cliquez sur **`[✏️ Modifier]`** pour ajuster le texte explicatif ou la recommandation d'un gabarit et sauvegarder la règle personnalisée dans SQLite.
 
 ### 3. 🚨 Gestion des Alertes (Alerts)
 - Lorsqu'une fuite de données, une élévation de privilèges ou une tentative d'intrusion est détectée, une alerte est qualifiée avec son niveau de sévérité (**High**, **Moderate**, **Low**).
@@ -61,9 +72,9 @@
 - **Serveur Syslog Réseau (UDP/TCP)** : Activez l'écoute Syslog sur le port standard (ex: `514` ou `1514`) pour centraliser les logs de vos pare-feux, commutateurs, routeurs et serveurs distants.
 
 ### 5. ⚙️ Configuration & Mises à Jour (Configuration)
-- **Dictionnaire Sémantique** : Consultez ou rechargez à chaud le catalogue JSON `translations_fr.json`.
+- **Dictionnaire Sémantique** : Consultez les règles actives ou cliquez sur **`[Mettre à jour depuis GitHub (OTA)]`** pour synchroniser instantanément les dernières règles publiées.
 - **IA Locale** : Connectez votre instance Ollama ou LM Studio locale pour des explications contextuelles de sécurité encore plus riches.
-- **Mises à jour OTA** : Cliquez sur **« Vérifier maintenant »** pour contrôler la disponibilité d'une nouvelle version de DeFuDoLog.
+- **Mises à jour Logicielles OTA** : Cliquez sur **« Vérifier maintenant »** pour contrôler la disponibilité d'une nouvelle version de DeFuDoLog.
 
 ---
 

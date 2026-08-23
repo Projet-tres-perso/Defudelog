@@ -168,6 +168,10 @@ impl Database {
         let _ = conn.execute("ALTER TABLE alerts ADD COLUMN llm_explanation TEXT", []);
         let _ = conn.execute("ALTER TABLE alerts ADD COLUMN mitigation_suggestion TEXT", []);
         let _ = conn.execute("ALTER TABLE raw_logs ADD COLUMN meaning TEXT", []);
+        let _ = conn.execute("ALTER TABLE raw_logs ADD COLUMN explanation TEXT", []);
+        let _ = conn.execute("ALTER TABLE raw_logs ADD COLUMN recommendation TEXT", []);
+        let _ = conn.execute("ALTER TABLE template_translations ADD COLUMN explanation TEXT", []);
+        let _ = conn.execute("ALTER TABLE template_translations ADD COLUMN recommendation TEXT", []);
         let _ = conn.execute("ALTER TABLE log_sources ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'", []);
 
         // Purge automatique de toute fausse source ou donnée démo résiduelle
@@ -331,8 +335,8 @@ impl Database {
     pub fn insert_raw_log(&self, log: &RawLog) -> Result<(), AppError> {
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT OR IGNORE INTO raw_logs (id, source_id, hostname, raw_message, log_hash, meaning, timestamp, ingested_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT OR IGNORE INTO raw_logs (id, source_id, hostname, raw_message, log_hash, meaning, explanation, recommendation, timestamp, ingested_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 log.id,
                 log.source_id,
@@ -340,6 +344,8 @@ impl Database {
                 log.raw_message,
                 log.log_hash,
                 log.meaning,
+                log.explanation,
+                log.recommendation,
                 log.timestamp.to_rfc3339(),
                 log.ingested_at.to_rfc3339(),
             ],
@@ -353,8 +359,8 @@ impl Database {
         let mut count = 0;
         for log in logs {
             let result = tx.execute(
-                "INSERT OR IGNORE INTO raw_logs (id, source_id, hostname, raw_message, log_hash, meaning, timestamp, ingested_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT OR IGNORE INTO raw_logs (id, source_id, hostname, raw_message, log_hash, meaning, explanation, recommendation, timestamp, ingested_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     log.id,
                     log.source_id,
@@ -362,6 +368,8 @@ impl Database {
                     log.raw_message,
                     log.log_hash,
                     log.meaning,
+                    log.explanation,
+                    log.recommendation,
                     log.timestamp.to_rfc3339(),
                     log.ingested_at.to_rfc3339(),
                 ],
@@ -399,9 +407,9 @@ impl Database {
         let conn = self.conn.lock();
 
         let where_clause = match (source_id, search) {
-            (Some(s), Some(q)) => format!("WHERE source_id = '{}' AND (raw_message LIKE '%{}%' OR meaning LIKE '%{}%')", s, q, q),
+            (Some(s), Some(q)) => format!("WHERE source_id = '{}' AND (raw_message LIKE '%{}%' OR meaning LIKE '%{}%' OR explanation LIKE '%{}%')", s, q, q, q),
             (Some(s), None) => format!("WHERE source_id = '{}'", s),
-            (None, Some(q)) => format!("WHERE raw_message LIKE '%{}%' OR meaning LIKE '%{}%'", q, q),
+            (None, Some(q)) => format!("WHERE raw_message LIKE '%{}%' OR meaning LIKE '%{}%' OR explanation LIKE '%{}%'", q, q, q),
             (None, None) => String::new(),
         };
 
@@ -412,7 +420,7 @@ impl Database {
         )?;
 
         let mut stmt = conn.prepare(&format!(
-            "SELECT id, source_id, hostname, raw_message, log_hash, meaning, timestamp, ingested_at
+            "SELECT id, source_id, hostname, raw_message, log_hash, meaning, explanation, recommendation, timestamp, ingested_at
              FROM raw_logs {} ORDER BY timestamp DESC LIMIT ?1 OFFSET ?2",
             where_clause
         ))?;
@@ -425,8 +433,10 @@ impl Database {
                 raw_message: row.get(3)?,
                 log_hash: row.get(4)?,
                 meaning: row.get(5)?,
-                timestamp: parse_datetime(&row.get::<_, String>(6)?),
-                ingested_at: parse_datetime(&row.get::<_, String>(7)?),
+                explanation: row.get(6)?,
+                recommendation: row.get(7)?,
+                timestamp: parse_datetime(&row.get::<_, String>(8)?),
+                ingested_at: parse_datetime(&row.get::<_, String>(9)?),
             })
         })?;
 
@@ -439,12 +449,14 @@ impl Database {
     pub fn save_template_translation(&self, translation: &crate::models::TemplateTranslation) -> Result<(), AppError> {
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT OR REPLACE INTO template_translations (template_hash, template_pattern, french_format, status_level, learned_from, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT OR REPLACE INTO template_translations (template_hash, template_pattern, french_format, explanation, recommendation, status_level, learned_from, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 translation.template_hash,
                 translation.template_pattern,
                 translation.french_format,
+                translation.explanation,
+                translation.recommendation,
                 translation.status_level,
                 translation.learned_from,
                 translation.created_at.to_rfc3339(),
@@ -453,11 +465,11 @@ impl Database {
         Ok(())
     }
 
-    pub fn get_all_template_translations(&self) -> Result<Vec<(String, String, String)>, AppError> {
+    pub fn get_all_template_translations(&self) -> Result<Vec<crate::translator::CustomTranslationTuple>, AppError> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare("SELECT template_pattern, french_format, status_level FROM template_translations")?;
+        let mut stmt = conn.prepare("SELECT template_pattern, french_format, explanation, recommendation, status_level FROM template_translations")?;
         let rows = stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
         })?;
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
@@ -586,7 +598,7 @@ impl Database {
 
         // Logs précédents
         let mut before_stmt = conn.prepare(&format!(
-            "SELECT id, source_id, hostname, raw_message, log_hash, meaning, timestamp, ingested_at
+            "SELECT id, source_id, hostname, raw_message, log_hash, meaning, explanation, recommendation, timestamp, ingested_at
              FROM raw_logs
              WHERE timestamp <= ?1 {}
              ORDER BY timestamp DESC LIMIT ?2",
@@ -601,8 +613,10 @@ impl Database {
                 raw_message: row.get(3)?,
                 log_hash: row.get(4)?,
                 meaning: row.get(5)?,
-                timestamp: parse_datetime(&row.get::<_, String>(6)?),
-                ingested_at: parse_datetime(&row.get::<_, String>(7)?),
+                explanation: row.get(6)?,
+                recommendation: row.get(7)?,
+                timestamp: parse_datetime(&row.get::<_, String>(8)?),
+                ingested_at: parse_datetime(&row.get::<_, String>(9)?),
             })
         })?;
 
@@ -611,7 +625,7 @@ impl Database {
 
         // Logs suivants
         let mut after_stmt = conn.prepare(&format!(
-            "SELECT id, source_id, hostname, raw_message, log_hash, meaning, timestamp, ingested_at
+            "SELECT id, source_id, hostname, raw_message, log_hash, meaning, explanation, recommendation, timestamp, ingested_at
              FROM raw_logs
              WHERE timestamp > ?1 {}
              ORDER BY timestamp ASC LIMIT ?2",
@@ -626,8 +640,10 @@ impl Database {
                 raw_message: row.get(3)?,
                 log_hash: row.get(4)?,
                 meaning: row.get(5)?,
-                timestamp: parse_datetime(&row.get::<_, String>(6)?),
-                ingested_at: parse_datetime(&row.get::<_, String>(7)?),
+                explanation: row.get(6)?,
+                recommendation: row.get(7)?,
+                timestamp: parse_datetime(&row.get::<_, String>(8)?),
+                ingested_at: parse_datetime(&row.get::<_, String>(9)?),
             })
         })?;
 
