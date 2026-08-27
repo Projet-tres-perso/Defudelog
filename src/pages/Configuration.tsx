@@ -740,16 +740,17 @@ export default function Configuration() {
                     />
                     <span className="text-xs text-surface-400">jours</span>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={handleManualPurge}
-                    disabled={purging}
-                    className="btn bg-red-600/80 hover:bg-red-600 text-white text-xs px-4 py-2 w-full sm:w-auto ml-auto flex items-center justify-center gap-1.5 transition"
-                  >
-                    <Trash2 size={14} />
-                    {purging ? "Purge en cours..." : "Purger Maintenant"}
-                  </button>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={handleManualPurge}
+                      disabled={purging}
+                      className="btn bg-red-600/80 hover:bg-red-600 text-white text-xs px-4 py-2 w-full sm:w-auto ml-auto flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Trash2 size={14} />
+                      {purging ? "Purge en cours..." : "Purger Maintenant"}
+                    </button>
+                  </div>
                 </div>
 
                 {purgeResult && (
