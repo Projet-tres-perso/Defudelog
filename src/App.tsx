@@ -34,6 +34,7 @@ export default function App() {
   const location = useLocation();
   const [mlStatus, setMlStatus] = useState<"loading" | "ready" | "error">("ready");
   const [networkError, setNetworkError] = useState<string | null>(null);
+  const [availableUpdateVersion, setAvailableUpdateVersion] = useState<string | null>(null);
 
   useEffect(() => {
     const unlistenLoading = listen("ml-loading", () => setMlStatus("loading"));
@@ -46,11 +47,27 @@ export default function App() {
       setNetworkError(e.payload as string);
     });
 
+    const handleUpdateFound = (e: Event) => {
+      const customEvent = e as CustomEvent<{ version: string }>;
+      if (customEvent.detail?.version) {
+        setAvailableUpdateVersion(customEvent.detail.version);
+      }
+    };
+
+    const handleUpdateNotFound = () => {
+      setAvailableUpdateVersion(null);
+    };
+
+    window.addEventListener("defudelog-update-found", handleUpdateFound);
+    window.addEventListener("defudelog-update-not-found", handleUpdateNotFound);
+
     return () => {
       unlistenLoading.then(f => f());
       unlistenReady.then(f => f());
       unlistenError.then(f => f());
       unlistenNetwork.then(f => f());
+      window.removeEventListener("defudelog-update-found", handleUpdateFound);
+      window.removeEventListener("defudelog-update-not-found", handleUpdateNotFound);
     };
   }, []);
 
@@ -95,24 +112,46 @@ export default function App() {
         <nav className="flex-1 p-3 space-y-0.5">
           {navItems.map(({ to, icon: Icon, label }) => {
             const isActive = location.pathname === to;
+            const hasUpdate = to === "/config" && availableUpdateVersion;
             return (
               <NavLink
                 key={to}
                 to={to}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-100 ${isActive
+                className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-100 ${isActive
                     ? "bg-primary-600/15 text-primary-400"
                     : "text-surface-400 hover:bg-surface-800 hover:text-surface-200"
                   }`}
               >
-                <Icon size={18} />
-                {label}
+                <div className="flex items-center gap-3">
+                  <Icon size={18} />
+                  <span>{label}</span>
+                </div>
+                {hasUpdate && (
+                  <span className="flex h-2 w-2 relative" title={`Mise à jour v${availableUpdateVersion} disponible !`}>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                )}
               </NavLink>
             );
           })}
         </nav>
 
-        <div className="p-3 border-t border-surface-700">
-          <div className="flex items-center gap-2 px-3 py-2">
+        <div className="p-3 border-t border-surface-700 space-y-2">
+          {availableUpdateVersion && (
+            <NavLink
+              to="/config"
+              className="flex items-center justify-between p-2 rounded-lg bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/50 transition-all text-2xs"
+            >
+              <span className="font-semibold flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                v{availableUpdateVersion} dispo
+              </span>
+              <span className="text-3xs bg-emerald-500/20 px-1.5 py-0.5 rounded text-emerald-200 font-mono">Voir</span>
+            </NavLink>
+          )}
+
+          <div className="flex items-center gap-2 px-3 py-1">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-xs text-surface-400">Monitoring actif</span>
           </div>

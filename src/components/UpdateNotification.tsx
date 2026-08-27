@@ -1,33 +1,53 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { check, Update } from "@tauri-apps/plugin-updater";
-import { Sparkles, Download, RefreshCw, X, CheckCircle2, AlertCircle } from "lucide-react";
+import { Sparkles, Download, RefreshCw, X, CheckCircle2, AlertCircle, ChevronUp } from "lucide-react";
 
 export default function UpdateNotification() {
   const [update, setUpdate] = useState<Update | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState<number>(0);
   const [downloaded, setDownloaded] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [minimized, setMinimized] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const checkForUpdates = async () => {
+  const checkForUpdates = useCallback(async (notifyIfNone = false) => {
     try {
       const updateResult = await check();
       if (updateResult && updateResult.available) {
         setUpdate(updateResult);
+        setMinimized(false);
+        // Informer l'application globale (ex: Sidebar) qu'une mise à jour est disponible
+        window.dispatchEvent(new CustomEvent("defudelog-update-found", { detail: { version: updateResult.version } }));
+      } else {
+        window.dispatchEvent(new CustomEvent("defudelog-update-not-found"));
+        if (notifyIfNone) {
+          console.info("DefuDelog est à jour (aucune nouvelle version).");
+        }
       }
     } catch (e) {
-      // Ignorer silencieusement en dev ou si hors-ligne
       console.debug("Vérification mise à jour (Tauri Updater):", e);
+      window.dispatchEvent(new CustomEvent("defudelog-update-error", { detail: String(e) }));
     }
-  };
+  }, []);
 
   useEffect(() => {
     checkForUpdates();
+
+    // Écouter les requêtes de vérification manuelle provenant de la page Configuration
+    const handleTriggerCheck = () => {
+      checkForUpdates(true);
+    };
+
+    window.addEventListener("defudelog-check-update", handleTriggerCheck);
+
     // Vérification périodique toutes les 4 heures
-    const interval = setInterval(checkForUpdates, 4 * 60 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
+    const interval = setInterval(() => checkForUpdates(false), 4 * 60 * 60 * 1000);
+
+    return () => {
+      window.removeEventListener("defudelog-check-update", handleTriggerCheck);
+      clearInterval(interval);
+    };
+  }, [checkForUpdates]);
 
   const handleInstallUpdate = async () => {
     if (!update) return;
@@ -64,7 +84,23 @@ export default function UpdateNotification() {
     }
   };
 
-  if (!update || dismissed) return null;
+  if (!update) return null;
+
+  // Si l'utilisateur a minimisé la boîte, afficher une pastille compacte et élégante
+  if (minimized) {
+    return (
+      <button
+        type="button"
+        onClick={() => setMinimized(false)}
+        className="fixed bottom-5 right-5 z-50 flex items-center gap-2 bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-500 hover:to-indigo-500 text-white text-xs font-semibold py-2 px-3.5 rounded-full shadow-2xl border border-primary-400/40 animate-bounce transition-all hover:scale-105"
+        title="Ouvrir la notification de mise à jour"
+      >
+        <Sparkles size={14} className="text-yellow-300" />
+        <span>Mise à jour v{update.version} disponible !</span>
+        <ChevronUp size={14} />
+      </button>
+    );
+  }
 
   return (
     <div className="fixed bottom-5 right-5 z-50 max-w-md w-full animate-in fade-in slide-in-from-bottom-5 duration-300">
@@ -88,14 +124,16 @@ export default function UpdateNotification() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setDismissed(true)}
-            className="text-surface-500 hover:text-surface-300 p-1 rounded-lg transition-colors"
-            title="Masquer"
-          >
-            <X size={14} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setMinimized(true)}
+              className="text-surface-500 hover:text-surface-300 p-1 rounded-lg transition-colors"
+              title="Minimiser sous forme de pastille"
+            >
+              <X size={14} />
+            </button>
+          </div>
         </div>
 
         {/* Release Notes Preview */}
@@ -134,7 +172,7 @@ export default function UpdateNotification() {
           {downloaded ? (
             <div className="flex items-center gap-1.5 text-2xs text-emerald-400 font-medium">
               <CheckCircle2 size={14} />
-              <span>Mise à jour prête ! Redémarrez l'application.</span>
+              <span>Mise à jour prête ! Redémarrez l'application pour appliquer.</span>
             </div>
           ) : (
             <button
