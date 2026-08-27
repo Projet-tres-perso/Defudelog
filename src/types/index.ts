@@ -162,6 +162,18 @@ export interface LanServerSettings {
   user_allowed_views: string[];
 }
 
+export interface LanServerStatus {
+  is_running: boolean;
+  port: number;
+  local_ip: string;
+  url: string;
+  admin_username: string;
+  admin_access_key: string;
+  user_username: string;
+  user_access_key: string;
+  user_allowed_views: string[];
+}
+
 export interface DetectionSettings {
   batch_size: number;
   anomaly_threshold: number;

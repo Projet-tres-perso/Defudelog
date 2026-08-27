@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings, DetectionSettings, KafkaSettings, LlmSettings, RetentionSettings, PurgeResult } from "@/types";
+import type { AppSettings, DetectionSettings, KafkaSettings, LlmSettings, RetentionSettings, PurgeResult, LanServerStatus } from "@/types";
 import InfoTooltip from "@/components/InfoTooltip";
 import { check } from "@tauri-apps/plugin-updater";
-import { Save, RotateCcw, Send, Bell, Eye, EyeOff, Brain, Check, X, Server, Trash2, Archive, Database, Sparkles, ShieldCheck, RefreshCw } from "lucide-react";
+import { Save, RotateCcw, Send, Bell, Eye, EyeOff, Brain, Check, X, Server, Trash2, Archive, Database, Sparkles, ShieldCheck, RefreshCw, ExternalLink, Copy, CheckCheck, Globe, HelpCircle } from "lucide-react";
 
 export default function Configuration() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -22,11 +22,68 @@ export default function Configuration() {
   const [purgeResult, setPurgeResult] = useState<PurgeResult | null>(null);
   const [manualPurgeDays, setManualPurgeDays] = useState(30);
 
+  const [lanStatus, setLanStatus] = useState<LanServerStatus | null>(null);
+  const [copiedLanUrl, setCopiedLanUrl] = useState(false);
+
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<{
+    type: "idle" | "up-to-date" | "update-available" | "error";
+    version?: string;
+    body?: string;
+    checkedAt?: string;
+    message?: string;
+  }>({ type: "idle" });
+
+  const loadLanStatus = useCallback(async () => {
+    try {
+      const status = await invoke<LanServerStatus>("get_lan_server_status");
+      setLanStatus(status);
+    } catch (e) {
+      console.error("Erreur récupération statut LAN:", e);
+    }
+  }, []);
+
   useEffect(() => {
     invoke<AppSettings>("get_settings").then((res) => {
       setSettings(res);
     }).catch(console.error);
-  }, []);
+
+    loadLanStatus();
+  }, [loadLanStatus]);
+
+  const handleCheckUpdate = async () => {
+    setUpdateChecking(true);
+    try {
+      window.dispatchEvent(new CustomEvent("defudelog-check-update"));
+      const res = await check();
+      const nowStr = new Date().toLocaleTimeString();
+
+      if (res && res.available) {
+        setUpdateStatus({
+          type: "update-available",
+          version: res.version,
+          body: res.body || undefined,
+          checkedAt: nowStr,
+          message: `Nouvelle version v${res.version} disponible ! La notification de téléchargement est prête.`,
+        });
+      } else {
+        setUpdateStatus({
+          type: "up-to-date",
+          checkedAt: nowStr,
+          message: "DefuDelog est à jour. Vous disposez de la version la plus récente.",
+        });
+      }
+    } catch (e) {
+      const nowStr = new Date().toLocaleTimeString();
+      setUpdateStatus({
+        type: "up-to-date",
+        checkedAt: nowStr,
+        message: "Vérification effectuée : Aucune mise à jour détectée sur le canal officiel (ou serveur hors-ligne).",
+      });
+    } finally {
+      setUpdateChecking(false);
+    }
+  };
 
   const save = async () => {
     if (!settings) return;
@@ -386,38 +443,47 @@ export default function Configuration() {
 
             {settings.lan_server?.enabled ? (
               <div className="space-y-4 pt-1">
-                {/* Live Banner with direct IP URL */}
-                <div className="p-4 bg-blue-950/50 border border-blue-500/40 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner">
-                  <div className="space-y-1">
+                {/* Live Banner with direct Local IP URL */}
+                <div className="p-4 bg-blue-950/50 border border-blue-500/40 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-inner">
+                  <div className="space-y-1.5 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                      <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Serveur Actif sur le Réseau</span>
+                      <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Serveur Actif sur le Réseau Local</span>
                     </div>
-                    <p className="text-xs text-surface-200 font-mono flex items-center gap-1.5">
-                      URL Réseau : <strong className="text-blue-300 select-all">http://localhost:{settings.lan_server.port}</strong>
-                    </p>
-                    <p className="text-2xs text-surface-400">
-                      Accessible depuis n'importe quel PC/Mobile connecté au même Wi-Fi ou LAN via l'IP de cette machine.
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-surface-300 font-medium">URL Réseau d'Accès :</span>
+                      <strong className="text-sm font-mono text-cyan-300 bg-cyan-950/70 border border-cyan-700/40 px-2.5 py-0.5 rounded select-all shadow-sm">
+                        {lanStatus?.url || `http://${lanStatus?.local_ip || "127.0.0.1"}:${settings.lan_server.port}`}
+                      </strong>
+                    </div>
+                    <p className="text-2xs text-surface-400 leading-relaxed">
+                      💡 <strong>À quoi sert la console web LAN ?</strong> Elle permet à vos collaborateurs et analystes SOC connectés au même réseau (Wi-Fi/LAN) de surveiller les logs et alertes depuis leur navigateur (PC, Mac, Smartphone) sans installer l'application.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => {
-                        navigator.clipboard.writeText(`http://localhost:${settings.lan_server.port}`);
-                        alert(`URL copiée dans le presse-papier : http://localhost:${settings.lan_server.port}`);
+                        const targetUrl = lanStatus?.url || `http://${lanStatus?.local_ip || "127.0.0.1"}:${settings.lan_server.port}`;
+                        navigator.clipboard.writeText(targetUrl);
+                        setCopiedLanUrl(true);
+                        setTimeout(() => setCopiedLanUrl(false), 2500);
                       }}
-                      className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 bg-blue-900/40 border-blue-700/50 hover:bg-blue-800/50 text-blue-200"
+                      className="btn-secondary text-xs px-3 py-2 flex items-center gap-1.5 bg-blue-900/40 border-blue-700/50 hover:bg-blue-800/50 text-blue-200"
                     >
-                      Copier l'URL
+                      {copiedLanUrl ? <CheckCheck size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                      <span>{copiedLanUrl ? "URL Copiée !" : "Copier l'URL"}</span>
                     </button>
                     <a
-                      href={`http://localhost:${settings.lan_server.port}`}
+                      href={lanStatus?.url || `http://${lanStatus?.local_ip || "127.0.0.1"}:${settings.lan_server.port}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1"
+                      className="btn-primary text-xs px-3.5 py-2 flex items-center gap-1.5 shadow-lg shadow-blue-500/20"
+                      title="Ouvre la console web distante dans votre navigateur par défaut pour tester l'accès réseau et la saisie de clé."
                     >
-                      Ouvrir la Console
+                      <ExternalLink size={14} />
+                      <span>Ouvrir la Console (Navigateur)</span>
                     </a>
                   </div>
                 </div>
@@ -1015,12 +1081,14 @@ export default function Configuration() {
                 <Sparkles size={16} className="text-primary-400" />
                 <span>Mises à Jour Logicielles & Maintien Automatique</span>
               </h3>
-              <span className="badge bg-primary-500/10 text-primary-400 text-2xs border border-primary-500/30 font-mono">
-                v2.0.0
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="badge bg-primary-500/10 text-primary-400 text-2xs border border-primary-500/30 font-mono">
+                  Version Actuelle : v2.0.0
+                </span>
+              </div>
             </div>
 
-            <div className="p-3 bg-surface-900/80 rounded-xl border border-surface-800 space-y-2.5">
+            <div className="p-3 bg-surface-900/80 rounded-xl border border-surface-800 space-y-3">
               <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
                 <ShieldCheck size={16} />
                 <span>Persistance des Données & Zéro Perte Garantie</span>
@@ -1029,28 +1097,63 @@ export default function Configuration() {
                 Les mises à jour automatiques téléchargent et appliquent uniquement le nouveau binaire applicatif. Votre base de données SQLite locale, vos clés d'API, vos règles DLP et l'historique complet de vos logs restent 100% intacts dans le répertoire sécurisé de l'application.
               </p>
 
-              <div className="pt-2 border-t border-surface-800 flex items-center justify-between">
+              {/* Dynamic Update Verification Status Box */}
+              {updateChecking && (
+                <div className="p-3 rounded-lg bg-blue-950/60 border border-blue-500/40 text-xs text-blue-300 flex items-center gap-2.5 animate-pulse">
+                  <RefreshCw size={15} className="animate-spin text-blue-400 shrink-0" />
+                  <span>Recherche de mise à jour auprès du dépôt officiel GitHub Releases...</span>
+                </div>
+              )}
+
+              {!updateChecking && updateStatus.type === "up-to-date" && (
+                <div className="p-3 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-xs text-emerald-300 flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCheck size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-emerald-200">{updateStatus.message}</p>
+                      {updateStatus.checkedAt && (
+                        <p className="text-3xs text-emerald-400/70 font-mono mt-0.5">
+                          Dernière vérification réussie à {updateStatus.checkedAt}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <span className="badge bg-emerald-500/20 text-emerald-300 text-3xs shrink-0">À jour</span>
+                </div>
+              )}
+
+              {!updateChecking && updateStatus.type === "update-available" && (
+                <div className="p-3 rounded-lg bg-gradient-to-r from-primary-950/70 to-indigo-950/70 border border-primary-500/50 text-xs text-primary-200 space-y-2 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-white">
+                      <Sparkles size={15} className="text-yellow-300 animate-pulse" />
+                      <span>Nouvelle version v{updateStatus.version} disponible !</span>
+                    </div>
+                    <span className="badge bg-yellow-500/20 text-yellow-300 text-3xs font-mono">Prêt</span>
+                  </div>
+                  {updateStatus.body && (
+                    <p className="text-3xs text-surface-300 bg-surface-950/60 p-2 rounded border border-surface-800 leading-relaxed max-h-20 overflow-y-auto">
+                      {updateStatus.body}
+                    </p>
+                  )}
+                  <p className="text-3xs text-emerald-400 font-medium">
+                    ✨ La pastille de téléchargement s'est ouverte en bas à droite de l'écran.
+                  </p>
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-surface-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <span className="text-2xs text-surface-500 font-mono">
-                  Canal de diffusion : GitHub Releases (Main Branch)
+                  Canal officiel : GitHub Releases (Main Branch)
                 </span>
                 <button
                   type="button"
-                  onClick={async () => {
-                    try {
-                      const res = await check();
-                      if (res && res.available) {
-                        alert(`Nouvelle version v${res.version} disponible ! La notification de téléchargement a été affichée.`);
-                      } else {
-                        alert("Votre application DefuDelog est déjà à jour (dernière version installée).");
-                      }
-                    } catch (e) {
-                      alert("Vérification terminée : Aucune mise à jour disponible ou serveur non accessible en environnement local.");
-                    }
-                  }}
-                  className="btn-primary text-xs py-1 px-3 flex items-center gap-1.5"
+                  onClick={handleCheckUpdate}
+                  disabled={updateChecking}
+                  className="btn-primary text-xs py-1.5 px-3.5 flex items-center justify-center gap-1.5 shadow-md"
                 >
-                  <RefreshCw size={13} />
-                  Vérifier maintenant
+                  <RefreshCw size={13} className={updateChecking ? "animate-spin" : ""} />
+                  <span>{updateChecking ? "Vérification en cours..." : "Vérifier maintenant"}</span>
                 </button>
               </div>
             </div>

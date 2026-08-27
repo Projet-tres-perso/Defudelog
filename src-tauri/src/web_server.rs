@@ -37,14 +37,22 @@ impl LanWebServer {
     }
 
     pub fn get_local_ip() -> String {
-        // 1. Tenter une résolution UDP vers l'extérieur
-        let targets = ["8.8.8.8:80", "1.1.1.1:80", "192.168.1.1:80", "10.0.0.1:80", "172.16.0.1:80"];
+        // 1. Tenter une résolution de routage UDP vers différents réseaux sans envoyer de données
+        let targets = [
+            "192.168.1.1:80",
+            "192.168.0.1:80",
+            "10.0.0.1:80",
+            "10.255.255.255:80",
+            "172.16.0.1:80",
+            "8.8.8.8:80",
+            "1.1.1.1:80",
+        ];
         for target in targets {
             if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
                 if socket.connect(target).is_ok() {
                     if let Ok(addr) = socket.local_addr() {
                         let ip_str = addr.ip().to_string();
-                        if ip_str != "0.0.0.0" && ip_str != "127.0.0.1" {
+                        if ip_str != "0.0.0.0" && ip_str != "127.0.0.1" && !ip_str.starts_with("127.") {
                             return ip_str;
                         }
                     }
