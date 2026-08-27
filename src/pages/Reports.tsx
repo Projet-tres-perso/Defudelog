@@ -26,7 +26,7 @@ export default function Reports() {
 
       // 2. Préparer le prompt
       const summaryText = `
-Statistiques DeFuDoLog v2:
+Statistiques DefuDelog v2:
 - Total logs: ${stats.total_logs}
 - Total alertes: ${stats.total_alerts} (Hautes: ${stats.high_alerts}, Modérées: ${stats.moderate_alerts})
 - Top 3 alertes récentes:
@@ -40,10 +40,10 @@ ${alerts.slice(0, 3).map((a) => `- [Catégorie: ${a.category}] Niveau: ${a.level
         try {
           const baseUrl = settings.llm.base_url || "http://localhost:1234/v1";
           const model = settings.llm.model || "local-model";
-          
+
           const res = await fetch(`${baseUrl}/chat/completions`, {
             method: "POST",
-            headers: { 
+            headers: {
               "Content-Type": "application/json",
               ...(settings.llm.api_key ? { "Authorization": `Bearer ${settings.llm.api_key}` } : {})
             },
@@ -91,7 +91,7 @@ ${alerts.slice(0, 3).map((a) => `- [Catégorie: ${a.category}] Niveau: ${a.level
     const sysAlerts = alerts.filter((a) => a.category === "system_anomaly");
     const privAlerts = alerts.filter((a) => a.category === "privilege_escalation");
 
-    return `# 🛡️ RAPPORT D'ANALYSE DE SÉCURITÉ MULTI-MENACES — DEFUDOLOG v2
+    return `# 🛡️ RAPPORT D'ANALYSE DE SÉCURITÉ MULTI-MENACES — DefuDelog v2
 
 **Date de génération** : ${now}  
 **Périmètre d'analyse** : Machine Hôte + Nœuds Réseau (Syslog 1514)  
@@ -101,7 +101,7 @@ ${alerts.slice(0, 3).map((a) => `- [Catégorie: ${a.category}] Niveau: ${a.level
 
 ## 1. Synthèse Exécutive
 
-La plateforme de détection DeFuDoLog a analysé **${stats.total_logs} logs** et a relevé un total de **${stats.total_alerts} alertes de sécurité** (dont **${stats.high_alerts} critiques** et **${stats.moderate_alerts} modérées**).
+La plateforme de détection DefuDelog a analysé **${stats.total_logs} logs** et a relevé un total de **${stats.total_alerts} alertes de sécurité** (dont **${stats.high_alerts} critiques** et **${stats.moderate_alerts} modérées**).
 
 ### Répartition par catégorie de menace :
 - **🛡️ Fuites de données** : ${dataLeaks.length} alerte(s)
@@ -149,7 +149,7 @@ ${a.reasons.map((r) => `  * ${r}`).join("\n")}
   const downloadReportMarkdown = () => {
     if (!reportMarkdown) return;
     const blob = new Blob([reportMarkdown], { type: "text/markdown" });
-    const filename = `rapport_secu_defudolog_${Date.now()}.md`;
+    const filename = `rapport_secu_defudelog_${Date.now()}.md`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -165,7 +165,7 @@ ${a.reasons.map((r) => `  * ${r}`).join("\n")}
       const alerts = alertsResult.alerts || [];
       const content = JSON.stringify(alerts, null, 2);
       const blob = new Blob([content], { type: "application/json" });
-      const filename = `alertes_defudolog_${Date.now()}.json`;
+      const filename = `alertes_defudelog_${Date.now()}.json`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -196,7 +196,7 @@ ${a.reasons.map((r) => `  * ${r}`).join("\n")}
       ]);
       const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const filename = `alertes_defudolog_${Date.now()}.csv`;
+      const filename = `alertes_defudelog_${Date.now()}.csv`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -235,11 +235,10 @@ ${a.reasons.map((r) => `  * ${r}`).join("\n")}
     <div className="p-6 space-y-6">
       {/* Toast Notification */}
       {notification && (
-        <div className={`p-4 rounded-xl border flex items-center justify-between shadow-2xl transition-all animate-in fade-in slide-in-from-top-2 ${
-          notification.type === "success"
-            ? "bg-emerald-950/80 border-emerald-500/50 text-emerald-200"
-            : "bg-red-950/80 border-red-500/50 text-red-200"
-        }`}>
+        <div className={`p-4 rounded-xl border flex items-center justify-between shadow-2xl transition-all animate-in fade-in slide-in-from-top-2 ${notification.type === "success"
+          ? "bg-emerald-950/80 border-emerald-500/50 text-emerald-200"
+          : "bg-red-950/80 border-red-500/50 text-red-200"
+          }`}>
           <div className="flex items-center gap-3">
             <CheckCircle2 size={20} className={notification.type === "success" ? "text-emerald-400" : "text-red-400"} />
             <div>
@@ -350,7 +349,7 @@ ${a.reasons.map((r) => `  * ${r}`).join("\n")}
               <div>
                 <p className="text-sm font-semibold">Rapport généré avec succès</p>
                 <p className="text-2xs text-surface-400">
-                  {llmUsed ? "Analyse effectuée par LLM Local (LM Studio / Ollama)" : "Synthèse analytique structurée DeFuDoLog"}
+                  {llmUsed ? "Analyse effectuée par LLM Local (LM Studio / Ollama)" : "Synthèse analytique structurée DefuDelog"}
                 </p>
               </div>
             </div>

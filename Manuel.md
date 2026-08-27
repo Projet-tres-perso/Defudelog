@@ -1,6 +1,6 @@
-# Manuel Pédagogique et Technique Approfondi — DeFuDoLog v2.3
+# Manuel Pédagogique et Technique Approfondi — DefuDelog v2.3
 
-Ce manuel s'adresse aux ingénieurs, analystes SOC, administrateurs et chercheurs en cybersécurité souhaitant maîtriser le fonctionnement, l'architecture logicielle, les capacités d'intégration réseau, le moteur sémantique multi-niveaux et le pipeline de détection de la plateforme **DeFuDoLog v2.3**.
+Ce manuel s'adresse aux ingénieurs, analystes SOC, administrateurs et chercheurs en cybersécurité souhaitant maîtriser le fonctionnement, l'architecture logicielle, les capacités d'intégration réseau, le moteur sémantique multi-niveaux et le pipeline de détection de la plateforme **DefuDelog v2.3**.
 
 ---
 
@@ -19,7 +19,7 @@ Les fuites de données (*Data Exfiltration / Data Leakage*) constituent la menac
 
 ## 2. Moteur Sémantique Enrichi & Multi-Niveaux (v2.3)
 
-Le moteur sémantique de **DeFuDoLog v2.3** repose sur 5 piliers :
+Le moteur sémantique de **DefuDelog v2.3** repose sur 5 piliers :
 
 ```
                                   [ Log Brut Ingesté ]
@@ -60,7 +60,7 @@ Les variables `{user}`, `{ip}`, `{port}`, `{file}`, `{table}`, `{status}`, `{app
 ## 3. Collecte Temps Réel & Surveillance Multi-OS
 
 ### 3.1. Démarrage Automatique
-Dès son lancement, DeFuDoLog démarre immédiatement la collecte sur toutes les sources configurées et actives. Aucune manipulation manuelle n'est requise.
+Dès son lancement, DefuDelog démarre immédiatement la collecte sur toutes les sources configurées et actives. Aucune manipulation manuelle n'est requise.
 
 ### 3.2. Prise en Charge Windows (Event Log)
 - **Canaux standards** : `Application`, `System` sont collectés nativement.
@@ -75,7 +75,7 @@ Dès son lancement, DeFuDoLog démarre immédiatement la collecte sur toutes les
 
 ## 4. Intégration Apache Kafka (Inbound & Outbound Streaming)
 
-DeFuDoLog s'intègre nativement dans une architecture d'entreprise via Apache Kafka pour le traitement haute cadence et la transmission aux SIEM centraux.
+DefuDelog s'intègre nativement dans une architecture d'entreprise via Apache Kafka pour le traitement haute cadence et la transmission aux SIEM centraux.
 
 ```
        ┌───────────────────────────────┐
@@ -86,9 +86,9 @@ DeFuDoLog s'intègre nativement dans une architecture d'entreprise via Apache Ka
                       ▼
         [ Topic Inbound : `logs` ]
                       │
-                      ▼ (DeFuDoLog Consomme en temps réel)
+                      ▼ (DefuDelog Consomme en temps réel)
 ┌─────────────────────────────────────────────────────────────┐
-│                       DeFuDoLog                             │
+│                       DefuDelog                             │
 │  1. Parsing Drain3 (Extraction de Template)                 │
 │  2. Moteur IA Multi-Axes (DBSCAN + Isolation Forest + NLP)  │
 │  3. Détection de Fuites & Exfiltration DLP                  │
@@ -96,7 +96,7 @@ DeFuDoLog s'intègre nativement dans une architecture d'entreprise via Apache Ka
 └─────────────────────────────┬───────────────────────────────┘
                               │ (Publie les logs enrichis et les alertes)
                               ▼
-     [ Topic Outbound : `defudolog-alerts` ]
+     [ Topic Outbound : `defudelog-alerts` ]
                               │
                               ▼
        ┌───────────────────────────────┐
@@ -106,12 +106,12 @@ DeFuDoLog s'intègre nativement dans une architecture d'entreprise via Apache Ka
 ```
 
 ### 4.1. Flux Entrant (Consommateur de Logs)
-1. DeFuDoLog se connecte aux courtiers (`brokers: ["192.168.1.100:9092"]`).
+1. DefuDelog se connecte aux courtiers (`brokers: ["192.168.1.100:9092"]`).
 2. Il consomme en flux continu les logs non structurés provenant de vos serveurs et équipements réseau.
 3. Chaque log est normalisé et injecté dans le pipeline d'IA multi-axes.
 
 ### 4.2. Flux Sortant (Producteur d'Alertes et Logs Enrichis)
-1. Après traitement par les 5 moteurs d'analyse, DeFuDoLog publie sur le topic sortant :
+1. Après traitement par les 5 moteurs d'analyse, DefuDelog publie sur le topic sortant :
    - Les **logs enrichis** (avec IDs de template, vecteurs sémantiques et indicateurs de conformité).
    - Les **alertes qualifiées** (format JSON ECS standardisé avec scores de fuite, classification MITRE ATT&CK, explications LLM et préconisations de remédiation).
 
@@ -119,13 +119,13 @@ DeFuDoLog s'intègre nativement dans une architecture d'entreprise via Apache Ka
 Dans l'onglet **Paramètres > Connecteur Kafka** :
 - Cliquez sur **"Activer le connecteur Kafka"**.
 - Renseignez les adresses des brokers (ex: `localhost:9092, kafka-02:9092`).
-- Définissez le topic d'entrée (ex: `logs-entreprises`) et le topic de sortie (ex: `defudolog-alerts`).
+- Définissez le topic d'entrée (ex: `logs-entreprises`) et le topic de sortie (ex: `defudelog-alerts`).
 
 ---
 
 ## 5. Console Web LAN Embarquée (Accès Réseau Distant `IP:PORT`)
 
-DeFuDoLog intègre un serveur Web HTTP asynchrone ultra-léger (en Rust / Tokio) permettant d'accéder au tableau de bord depuis n'importe quel ordinateur ou smartphone connecté au réseau local (LAN/Wi-Fi).
+DefuDelog intègre un serveur Web HTTP asynchrone ultra-léger (en Rust / Tokio) permettant d'accéder au tableau de bord depuis n'importe quel ordinateur ou smartphone connecté au réseau local (LAN/Wi-Fi).
 
 ### 5.1. Activation & Paramétrage
 Dans l'onglet **Paramètres > Serveur Web LAN Embarqué** :
@@ -151,11 +151,11 @@ L'accès à la console Web distante est protégé par une authentification par *
 
 ## 6. Désinstallation Propre & Suppression des Fichiers Résiduels (Windows NSIS)
 
-Lors de la désinstallation de DeFuDoLog sous Windows via le Panneau de configuration ou les Paramètres Windows :
+Lors de la désinstallation de DefuDelog sous Windows via le Panneau de configuration ou les Paramètres Windows :
 1. Le programme de désinstallation NSIS s'exécute.
 2. Une boîte de dialogue interactive demande confirmation :
-   > *"Souhaitez-vous également supprimer définitivement toutes les données de surveillance résiduelles (base de données SQLite %APPDATA%\defudolog, logs ingérés et configurations de DeFuDoLog) ?"*
-3. **Si vous cliquez sur "Oui"** : L'ensemble des répertoires `%APPDATA%\defudolog` et `%LOCALAPPDATA%\defudolog` sont purgés à 100%, ne laissant aucun fichier résiduel sur le système.
+   > *"Souhaitez-vous également supprimer définitivement toutes les données de surveillance résiduelles (base de données SQLite %APPDATA%\defudelog, logs ingérés et configurations de DefuDelog) ?"*
+3. **Si vous cliquez sur "Oui"** : L'ensemble des répertoires `%APPDATA%\defudelog` et `%LOCALAPPDATA%\defudelog` sont purgés à 100%, ne laissant aucun fichier résiduel sur le système.
 
 ---
 
@@ -192,10 +192,10 @@ $$\text{Probabilité Combinée } P(\text{Détection}) = 1 - \prod_{i} (1 - P_i)$
 
 ## 9. Mises à Jour Automatiques OTA & Intégrité des Données
 
-DeFuDoLog intègre un système officiel de mises à jour automatisées en direct (**Over-The-Air / OTA**) piloté par **Tauri Updater** et **GitHub Actions** :
+DefuDelog intègre un système officiel de mises à jour automatisées en direct (**Over-The-Air / OTA**) piloté par **Tauri Updater** et **GitHub Actions** :
 
 1. **Zéro Perte de Données Garantie :**
-   - Les données locales (base de données SQLite `defudolog.db`, règles personnalisées, sources configurées, dictionnaires sémantiques, clés d'API et journaux) sont stockées dans le dossier d'application sécurisé du système (`AppData` sous Windows, `Application Support` sous macOS, `~/.local/share` sous Linux).
+   - Les données locales (base de données SQLite `defudelog.db`, règles personnalisées, sources configurées, dictionnaires sémantiques, clés d'API et journaux) sont stockées dans le dossier d'application sécurisé du système (`AppData` sous Windows, `Application Support` sous macOS, `~/.local/share` sous Linux).
    - Les mises à jour remplacent exclusivement le binaire exécutable sans jamais impacter la base de données.
    - Au redémarrage, les migrations SQLite s'exécutent automatiquement pour adapter le schéma si de nouveaux champs ont été créés.
 

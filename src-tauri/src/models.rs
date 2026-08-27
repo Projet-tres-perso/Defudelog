@@ -364,7 +364,7 @@ pub struct LlmSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            db_path: "defudolog.db".to_string(),
+            db_path: "defudelog.db".to_string(),
             detection: DetectionSettings {
                 batch_size: 500,
                 anomaly_threshold: 0.3,
@@ -385,7 +385,7 @@ impl Default for AppSettings {
 "#!/bin/sh
 # Script de remédiation SOAR (Active Response)
 # Paramètres reçus : $1=ALERT_ID, $2=CATEGORY
-echo \"[$(date)] Mitigation déclenchée pour l'alerte $1 ($2)\" >> /tmp/defudolog_soar.log
+echo \"[$(date)] Mitigation déclenchée pour l'alerte $1 ($2)\" >> /tmp/defudelog_soar.log
 # Exemple : bloquer une IP avec iptables
 # iptables -A INPUT -s $3 -j DROP
 ".to_string()

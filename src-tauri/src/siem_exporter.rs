@@ -4,7 +4,7 @@ pub struct SiemExporter;
 
 impl SiemExporter {
     /// Formatage CEF (Common Event Format - HP ArcSight / Micro Focus / Splunk)
-    /// Exemple: CEF:0|DeFuDoLog|Platform|2.0|DATA_LEAK|Fuite de données suspecte|8|src=192.168.1.50 cat=data_leak msg=Exfiltration vers S3
+    /// Exemple: CEF:0|DefuDelog|Platform|2.0|DATA_LEAK|Fuite de données suspecte|8|src=192.168.1.50 cat=data_leak msg=Exfiltration vers S3
     pub fn to_cef(alert: &Alert) -> String {
         let severity_score = match alert.level {
             crate::models::AlertLevel::High => 9,
@@ -13,7 +13,7 @@ impl SiemExporter {
             crate::models::AlertLevel::Benign => 1,
         };
 
-        let device_vendor = "DeFuDoLog";
+        let device_vendor = "DefuDelog";
         let device_product = "Platform";
         let device_version = "2.0";
         let signature_id = alert.category.to_string().to_uppercase();
@@ -38,7 +38,7 @@ impl SiemExporter {
     }
 
     /// Formatage LEEF (Log Event Extended Format - IBM QRadar)
-    /// Exemple: LEEF:2.0|DeFuDoLog|Platform|2.0|DATA_LEAK|\tdevTime=... \tcat=data_leak \tsev=8
+    /// Exemple: LEEF:2.0|DefuDelog|Platform|2.0|DATA_LEAK|\tdevTime=... \tcat=data_leak \tsev=8
     pub fn to_leef(alert: &Alert) -> String {
         let severity_score = match alert.level {
             crate::models::AlertLevel::High => 9,
@@ -51,7 +51,7 @@ impl SiemExporter {
         let detected_at = alert.detected_at.to_rfc3339();
 
         format!(
-            "LEEF:2.0|DeFuDoLog|Platform|2.0|{}\tdevTime={}\tcat={}\tsev={}\tscore={:.2}\tusrMsg={}",
+            "LEEF:2.0|DefuDelog|Platform|2.0|{}\tdevTime={}\tcat={}\tsev={}\tscore={:.2}\tusrMsg={}",
             alert.category.to_string().to_uppercase(),
             detected_at,
             alert.category,
@@ -71,13 +71,13 @@ impl SiemExporter {
         };
 
         let timestamp = alert.detected_at.to_rfc3339();
-        let app_name = "defudolog";
+        let app_name = "defudelog";
         let proc_id = "-";
         let msg_id = alert.category.to_string();
         let reasons = alert.reasons.join(" ; ");
 
         format!(
-            "<{}>1 {} localhost {} {} {} [alert@defudolog level=\"{}\" score=\"{:.2}\"] {}",
+            "<{}>1 {} localhost {} {} {} [alert@defudelog level=\"{}\" score=\"{:.2}\"] {}",
             pri, timestamp, app_name, proc_id, msg_id, alert.level, alert.final_score, reasons
         )
     }

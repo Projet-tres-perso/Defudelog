@@ -26,11 +26,11 @@ impl ActiveResponseEngine {
             _ => {
                 #[cfg(unix)]
                 {
-                    "#!/bin/sh\necho \"DefuDoLog SOAR triggered for Alert: $1 | Category: $2\" >> /tmp/defudolog_soar.log\n".to_string()
+                    "#!/bin/sh\necho \"DefuDelog SOAR triggered for Alert: $1 | Category: $2\" >> /tmp/defudelog_soar.log\n".to_string()
                 }
                 #[cfg(windows)]
                 {
-                    "Write-Output \"DefuDoLog SOAR triggered for Alert: $args[0] | Category: $args[1]\" | Out-File -Append -FilePath \"$env:TEMP\\defudolog_soar.log\"\n".to_string()
+                    "Write-Output \"DefuDelog SOAR triggered for Alert: $args[0] | Category: $args[1]\" | Out-File -Append -FilePath \"$env:TEMP\\defudelog_soar.log\"\n".to_string()
                 }
             }
         };
@@ -43,7 +43,7 @@ impl ActiveResponseEngine {
         let mut script_path = std::env::temp_dir();
 
         if is_windows {
-            script_path.push("defudolog_active_response.ps1");
+            script_path.push("defudelog_active_response.ps1");
             std::fs::write(&script_path, script_content)
                 .map_err(AppError::Io)?;
 
@@ -68,7 +68,7 @@ impl ActiveResponseEngine {
 
             cmd.spawn().map_err(AppError::Io)?;
         } else {
-            script_path.push("defudolog_active_response.sh");
+            script_path.push("defudelog_active_response.sh");
             std::fs::write(&script_path, script_content)
                 .map_err(AppError::Io)?;
 

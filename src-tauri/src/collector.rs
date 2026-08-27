@@ -152,7 +152,7 @@ impl LogCollector {
                         }
                     },
                     Err(e) => {
-                        let err_msg = format!("[DEFUDOLOG PERMISSION ERROR] Impossible de lire le fichier '{}' : {}", file_path.display(), e);
+                        let err_msg = format!("[DefuDelog PERMISSION ERROR] Impossible de lire le fichier '{}' : {}", file_path.display(), e);
                         log::error!("{}", err_msg);
                         let _ = Self::ingest_line(&db, engine.as_ref(), translator.as_ref(), app_handle.as_ref(), &source_id_thread, &hostname, &err_msg);
                     }
@@ -312,7 +312,7 @@ impl LogCollector {
                 if !output.status.success() {
                     let err_text = String::from_utf8_lossy(&output.stderr);
                     if err_text.contains("Access is denied") || err_text.contains("accès est refusé") || err_text.contains("UnauthorizedAccess") {
-                        let warn_msg = format!("[DEFUDOLOG WARNING] Accès restreint au canal Windows '{}'. Lancez DeFuDoLog en tant qu'Administrateur pour surveiller ce canal.", channel);
+                        let warn_msg = format!("[DefuDelog WARNING] Accès restreint au canal Windows '{}'. Lancez DefuDelog en tant qu'Administrateur pour surveiller ce canal.", channel);
                         let _ = Self::ingest_line(&db, engine.as_ref(), translator.as_ref(), app_handle.as_ref(), &source_id, &hostname, &warn_msg);
                     }
                 } else {
@@ -614,7 +614,7 @@ impl LogCollector {
                 };
 
                 let help = if *requires_admin {
-                    Some("Le journal Windows Security requiert des privilèges Administrateur. Lancez DeFuDoLog en faisant 'Clic droit > Exécuter en tant qu'administrateur'.".to_string())
+                    Some("Le journal Windows Security requiert des privilèges Administrateur. Lancez DefuDelog en faisant 'Clic droit > Exécuter en tant qu'administrateur'.".to_string())
                 } else {
                     None
                 };

@@ -1,8 +1,8 @@
-# Analyse Critique, Rétrospective & Perspectives — DeFuDoLog v2.0
+# Analyse Critique, Rétrospective & Perspectives — DeFuDeLog v2.0
 
 ## 1. Rétrospective : De la v1 (POC Python/Kafka) à la v2.0 (Plateforme Native Rust)
 
-Le projet **DeFuDoLog** est né d'une volonté d'innover dans la détection des fuites de données en combinant le Machine Learning et les flux de logs.
+Le projet **eLog** est né d'une volonté d'innover dans la détection des fuites de données en combinant le Machine Learning et les flux de logs.
 La version initiale (v1) constituait une preuve de concept (POC) en Python s'appuyant sur un cluster Apache Kafka.
 
 ### Tableau Comparatif v1 vs v2.0
@@ -66,7 +66,7 @@ $$\text{Probabilité Combinée } P(\text{Détection}) = 1 - \prod_{i} (1 - P_i)$
 1. **Intégration d'un Agent eBPF (Linux Kernel Tracing)** :
    - Permettre la surveillance des accès système aux fichiers sensibles (`sys_openat`, `sys_read`) directement depuis le noyau Linux pour intercepter les fuites avant même leur écriture dans les logs.
 2. **Support Distribué Multi-Agents (Master-Worker)** :
-   - Permettre à un nœud DeFuDoLog central de piloter des agents légers déployés sur des centaines de serveurs avec synchronisation mTLS.
+   - Permettre à un nœud DefuDelog central de piloter des agents légers déployés sur des centaines de serveurs avec synchronisation mTLS.
 3. **Modèle de Langage Local Quantifié Embarqué (GGUF / Llama.cpp en Rust)** :
    - Intégrer un micro-LLM (type Qwen 2.5 1.5B 4-bit) directement compilé dans le binaire Rust pour supprimer toute dépendance externe envers Ollama ou OpenAI.
 4. **Apprentissage Actif (Feedback Loop de l'Analyste)** :

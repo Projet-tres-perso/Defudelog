@@ -83,12 +83,12 @@ impl AppState {
 
 fn get_db_path() -> String {
     if let Some(mut path) = dirs::data_dir() {
-        path.push("defudolog");
+        path.push("defudelog");
         let _ = std::fs::create_dir_all(&path);
-        path.push("defudolog.db");
+        path.push("defudelog.db");
         path.to_string_lossy().to_string()
     } else {
-        "defudolog_app.db".to_string()
+        "defudelog_app.db".to_string()
     }
 }
 
@@ -119,7 +119,7 @@ pub fn run() {
             app.manage(app_state);
 
             // Configuration du System Tray (Zone de notification)
-            let show_i = MenuItemBuilder::with_id("show", "Ouvrir DeFuDoLog").build(app)?;
+            let show_i = MenuItemBuilder::with_id("show", "Ouvrir DefuDelog").build(app)?;
             let status_i = MenuItemBuilder::with_id("status", "Protection & Surveillance Active").enabled(false).build(app)?;
             let quit_i = MenuItemBuilder::with_id("quit", "Quitter Définitivement").build(app)?;
             let menu = MenuBuilder::new(app).items(&[&show_i, &status_i, &quit_i]).build()?;
@@ -130,7 +130,7 @@ pub fn run() {
             let _tray = TrayIconBuilder::new()
                 .icon(tray_icon)
                 .menu(&menu)
-                .tooltip("DeFuDoLog — Surveillance et Détection DLP en Tâche de Fond")
+                .tooltip("DefuDelog — Surveillance et Détection DLP en Tâche de Fond")
                 .on_menu_event(move |app, event| {
                     match event.id().as_ref() {
                         "show" => {
@@ -211,5 +211,5 @@ pub fn run() {
             commands::sync_remote_dictionary,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running DeFuDoLog");
+        .expect("error while running DefuDelog");
 }

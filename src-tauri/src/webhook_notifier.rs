@@ -25,7 +25,7 @@ impl WebhookNotifier {
         // Formater le payload générique compatible Slack/Discord/Teams/Custom
         let payload = json!({
             "text": format!(
-                "{} *[DeFuDoLog] Alerte de Sécurité [{}]*\n> *Catégorie:* {}\n> *Niveau:* {}\n> *Score:* {:.0}%\n> *Raisons:* {}",
+                "{} *[DefuDelog] Alerte de Sécurité [{}]*\n> *Catégorie:* {}\n> *Niveau:* {}\n> *Score:* {:.0}%\n> *Raisons:* {}",
                 severity_emoji,
                 alert.category.to_string().to_uppercase(),
                 alert.category,
@@ -34,7 +34,7 @@ impl WebhookNotifier {
                 alert.reasons.join(", ")
             ),
             "content": format!(
-                "{} **[DeFuDoLog] Alerte [{}]**: {} (Score: {:.0}%)",
+                "{} **[DefuDelog] Alerte [{}]**: {} (Score: {:.0}%)",
                 severity_emoji,
                 alert.category,
                 alert.reasons.join(", "),
@@ -73,8 +73,8 @@ impl WebhookNotifier {
             .map_err(|e| e.to_string())?;
 
         let payload = json!({
-            "text": "🟢 *[DeFuDoLog] Test de connexion Webhook réussi !*\n> Les notifications d'alertes en temps réel sont désormais actives.",
-            "content": "🟢 **[DeFuDoLog] Test de connexion Webhook réussi !**"
+            "text": "🟢 *[DefuDelog] Test de connexion Webhook réussi !*\n> Les notifications d'alertes en temps réel sont désormais actives.",
+            "content": "🟢 **[DefuDelog] Test de connexion Webhook réussi !**"
         });
 
         let res = client.post(webhook_url)

@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    defudolog_lib::run();
+    defudelog_lib::run();
 }
