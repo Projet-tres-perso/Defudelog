@@ -81,7 +81,7 @@ impl LanWebServer {
         let local_ip = Self::get_local_ip();
         let url = format!("http://{}:{}", local_ip, port);
 
-        log::info!("🌐 Serveur Web LAN DeFuDoLog démarré sur {}", url);
+        log::info!("🌐 Serveur Web LAN DefuDelog démarré sur {}", url);
 
         tokio::spawn(async move {
             loop {
@@ -312,7 +312,7 @@ fn get_embedded_web_app_html() -> String {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DeFuDoLog — Console Web LAN</title>
+  <title>DefuDelog — Console Web LAN</title>
   <style>
     :root {
       --bg: #090d16;
@@ -444,7 +444,7 @@ fn get_embedded_web_app_html() -> String {
       <div class="logo-badge">DF</div>
       <div>
         <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <strong style="font-size: 1.05rem;">DeFuDoLog</strong>
+          <strong style="font-size: 1.05rem;">DefuDelog</strong>
           <span style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.7rem; font-family: monospace;">Console LAN</span>
         </div>
         <div style="font-size: 0.75rem; color: var(--text-muted);">Surveillance & Détection DLP Réseau</div>
@@ -548,9 +548,9 @@ fn get_embedded_web_app_html() -> String {
   </main>
 
   <script>
-    let currentToken = localStorage.getItem("defudolog_token");
-    let currentRole = localStorage.getItem("defudolog_role");
-    let currentViews = JSON.parse(localStorage.getItem("defudolog_views") || "[]");
+    let currentToken = localStorage.getItem("defudelog_token");
+    let currentRole = localStorage.getItem("defudelog_role");
+    let currentViews = JSON.parse(localStorage.getItem("defudelog_views") || "[]");
 
     function renderNav() {
       const tabs = document.getElementById("nav-tabs");
@@ -609,9 +609,9 @@ fn get_embedded_web_app_html() -> String {
           currentToken = data.token;
           currentRole = data.role;
           currentViews = data.allowed_views;
-          localStorage.setItem("defudolog_token", currentToken);
-          localStorage.setItem("defudolog_role", currentRole);
-          localStorage.setItem("defudolog_views", JSON.stringify(currentViews));
+          localStorage.setItem("defudelog_token", currentToken);
+          localStorage.setItem("defudelog_role", currentRole);
+          localStorage.setItem("defudelog_views", JSON.stringify(currentViews));
           showApp();
         } else {
           errEl.textContent = data.message || "Échec d'authentification";

@@ -1,12 +1,12 @@
 use chrono::Utc;
-use defudolog_lib::db::Database;
-use defudolog_lib::engine::DetectionPipeline;
-use defudolog_lib::models::{AlertLevel, AppSettings, DetectionRule, LogSource, RuleType, SourceType};
-use defudolog_lib::siem_exporter::SiemExporter;
+use defudelog_lib::db::Database;
+use defudelog_lib::engine::DetectionPipeline;
+use defudelog_lib::models::{AlertLevel, AppSettings, DetectionRule, LogSource, RuleType, SourceType};
+use defudelog_lib::siem_exporter::SiemExporter;
 use std::sync::Arc;
 
 fn setup_test_engine() -> (DetectionPipeline, Arc<Database>) {
-    let tmp_db_path = format!("{}/defudolog_test_{}.db", std::env::temp_dir().display(), uuid::Uuid::new_v4());
+    let tmp_db_path = format!("{}/defudelog_test_{}.db", std::env::temp_dir().display(), uuid::Uuid::new_v4());
     let db = Arc::new(Database::new(&tmp_db_path).expect("DB initialization failed"));
     
     // Insérer les sources nécessaires pour satisfaire la clé étrangère
@@ -116,13 +116,13 @@ fn test_siem_exports_formats() {
     let alerts = vec![alert];
 
     let cef = SiemExporter::export_batch(&alerts, "cef");
-    assert!(cef.contains("CEF:0|DeFuDoLog|Platform|2.0|"), "CEF format invalid");
+    assert!(cef.contains("CEF:0|DefuDelog|Platform|2.0|"), "CEF format invalid");
 
     let leef = SiemExporter::export_batch(&alerts, "leef");
-    assert!(leef.contains("LEEF:2.0|DeFuDoLog|Platform|2.0|"), "LEEF format invalid");
+    assert!(leef.contains("LEEF:2.0|DefuDelog|Platform|2.0|"), "LEEF format invalid");
 
     let syslog = SiemExporter::export_batch(&alerts, "syslog");
-    assert!(syslog.starts_with('<') && syslog.contains("defudolog"), "Syslog RFC 5424 format invalid");
+    assert!(syslog.starts_with('<') && syslog.contains("defudelog"), "Syslog RFC 5424 format invalid");
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn test_custom_rule_engine_integration() {
 
 #[test]
 fn test_semantic_log_translation() {
-    let translator = defudolog_lib::translator::LogTranslator::new();
+    let translator = defudelog_lib::translator::LogTranslator::new();
 
     // 1. Test SSH Connexion Réussie
     let raw_ssh = "Aug 20 09:42:15 server sshd[1842]: Accepted password for admin from 192.168.1.25 port 54321 ssh2";

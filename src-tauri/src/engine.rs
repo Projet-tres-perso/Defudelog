@@ -976,7 +976,7 @@ impl DetectionPipeline {
 
             // Webhook notification
             let webhook_target = app_settings.webhook_url.clone()
-                .or_else(|| std::env::var("DEFUDOLOG_WEBHOOK_URL").ok());
+                .or_else(|| std::env::var("DefuDelog_WEBHOOK_URL").ok());
 
             if let Some(webhook_url) = webhook_target {
                 if !webhook_url.trim().is_empty() {

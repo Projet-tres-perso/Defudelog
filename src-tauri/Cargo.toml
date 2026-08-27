@@ -1,8 +1,8 @@
 [package]
-name = "defudolog"
+name = "defudelog"
 version = "2.0.0"
 edition = "2021"
-description = "DeFuDoLog — Plateforme de détection de fuite de données par analyse de logs"
+description = "DefuDelog — Plateforme de détection de fuite de données par analyse de logs"
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
@@ -50,7 +50,7 @@ kafka = ["rdkafka"]
 tauri-build = { version = "2.0.0", features = [] }
 
 [lib]
-name = "defudolog_lib"
+name = "defudelog_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [profile.release]

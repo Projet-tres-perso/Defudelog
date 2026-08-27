@@ -1012,7 +1012,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "defudolog"
+name = "defudelog"
 version = "2.0.0"
 dependencies = [
  "chrono",

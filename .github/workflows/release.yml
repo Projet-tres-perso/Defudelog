@@ -69,8 +69,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
-          releaseName: "DeFuDoLog v__VERSION__"
-          releaseBody: "✨ Mise à jour automatique OTA de DeFuDoLog v__VERSION__ avec persistance garantie des données SQLite."
+          releaseName: "DefuDelog v__VERSION__"
+          releaseBody: "✨ Mise à jour automatique OTA de DefuDelog v__VERSION__ avec persistance garantie des données SQLite."
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

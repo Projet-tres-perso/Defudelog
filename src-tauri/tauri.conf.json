@@ -1,7 +1,7 @@
 {
-  "productName": "DeFuDoLog",
+  "productName": "DefuDelog",
   "version": "2.0.0",
-  "identifier": "com.defudolog.desktop",
+  "identifier": "com.defudelog.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -16,7 +16,7 @@
     },
     "windows": [
       {
-        "title": "DeFuDoLog — Data Leak Detection",
+        "title": "DefuDelog — Data Leak Detection",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,
@@ -45,7 +45,7 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "Plateforme de détection de fuite de données",
-    "longDescription": "DeFuDoLog est une plateforme desktop de détection de fuite de données par analyse multi-couche de logs (parsing, embeddings, clustering, détection d'anomalies).",
+    "longDescription": "DefuDelog est une plateforme desktop de détection de fuite de données par analyse multi-couche de logs (parsing, embeddings, clustering, détection d'anomalies).",
     "windows": {
       "nsis": {
         "installerHooks": "nsis_hooks.nsh"

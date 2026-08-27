@@ -17,7 +17,7 @@ impl Database {
         let conn = Connection::open(path)?;
         
         // Chiffrement SQLCipher (AES-256)
-        conn.pragma_update(None, "key", "defudolog_secret_key_2026")?;
+        conn.pragma_update(None, "key", "defudelog_secret_key_2026")?;
         
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -198,7 +198,7 @@ impl Database {
             ("keyword-sens", "Mot-clé sensible", "keyword", "sens|secret|confidentiel|password|token|api_key", "high"),
             ("keyword-ip-blacklist", "IP sur liste noire", "ip_blacklist", "192.168.1.42|192.168.1.28|10.0.0.99", "high"),
             ("user-blacklist", "Utilisateur compromis", "user_blacklist", "root|attacker19|cyrus", "high"),
-            ("time-suspect", "Heure suspecte", "time_window", "19-21", "moderate"),
+            ("time-suspect", "Heure suspecte", "time_window", "16-23", "moderate"),
             ("transfer-suspect", "Transfert de fichier suspect", "regex", r"scp|ftp|rsync|curl.*-o|wget", "high"),
             ("auth-failure-burst", "Rafale d'échecs d'auth", "template_match", "Failed password", "moderate"),
         ];
@@ -823,7 +823,7 @@ impl Database {
         if archive {
             let _ = std::fs::create_dir_all(archive_dir);
             let timestamp_now = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-            let file_name = format!("{}/defudolog_archive_{}.json", archive_dir, timestamp_now);
+            let file_name = format!("{}/defudelog_archive_{}.json", archive_dir, timestamp_now);
 
             // Récupérer les logs à archiver
             let mut stmt = conn.prepare(

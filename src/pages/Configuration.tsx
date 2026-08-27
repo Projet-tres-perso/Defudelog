@@ -13,7 +13,7 @@ export default function Configuration() {
 
   const [soarTesting, setSoarTesting] = useState(false);
   const [soarStatus, setSoarStatus] = useState<{ ok: boolean; msg: string } | null>(null);
-  
+
   const [llmTesting, setLlmTesting] = useState(false);
   const [llmTestStatus, setLlmTestStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -191,121 +191,121 @@ export default function Configuration() {
         {/* Left Column: Detection & SOAR */}
         <div className="space-y-6">
           <div className="card space-y-5">
-          <div className="card-header flex items-center justify-between">
-            <span>Moteur de Détection & Algorithmes</span>
-            <span className="badge bg-primary-500/10 text-primary-400 text-2xs">Temps réel</span>
-          </div>
-
-          <div className="space-y-4">
-            <h4 className="text-xs font-semibold text-surface-300 uppercase tracking-wider">1. Parsing & Tailing (Drain3)</h4>
-            <label className="block">
-              <span className="text-xs text-surface-400">Taille du batch (nombre de logs par lot)</span>
-              <input
-                type="number"
-                className="input mt-1"
-                value={settings.detection.batch_size}
-                onChange={(e) => updateDetection({ batch_size: parseInt(e.target.value) || 500 })}
-              />
-              <p className="text-3xs text-surface-500 mt-1">Nombre maximal de lignes analysées dans un cycle d'ingestion</p>
-            </label>
-
-            <h4 className="text-xs font-semibold text-surface-300 uppercase tracking-wider pt-2">2. Détection d'Anomalies & Model Supervisé</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-xs text-surface-400">Seuil d'anomalie de fréquence</span>
-                <input
-                  type="number"
-                  step="0.05"
-                  className="input mt-1"
-                  value={settings.detection.anomaly_threshold}
-                  onChange={(e) => updateDetection({ anomaly_threshold: parseFloat(e.target.value) || 0.3 })}
-                />
-                <p className="text-3xs text-surface-500 mt-1">Déclenche une alerte si la rareté dépasse ce seuil</p>
-              </label>
-              <label className="block">
-                <span className="text-xs text-surface-400">Seuil du modèle supervisé (TF-IDF)</span>
-                <input
-                  type="number"
-                  step="0.05"
-                  className="input mt-1"
-                  value={settings.detection.supervised_threshold}
-                  onChange={(e) => updateDetection({ supervised_threshold: parseFloat(e.target.value) || 0.6 })}
-                />
-                <p className="text-3xs text-surface-500 mt-1">Score min de correspondance avec les motifs connus</p>
-              </label>
+            <div className="card-header flex items-center justify-between">
+              <span>Moteur de Détection & Algorithmes</span>
+              <span className="badge bg-primary-500/10 text-primary-400 text-2xs">Temps réel</span>
             </div>
 
-            <h4 className="text-xs font-semibold text-surface-300 uppercase tracking-wider pt-2">3. Clustering DBSCAN (Outliers)</h4>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-4">
+              <h4 className="text-xs font-semibold text-surface-300 uppercase tracking-wider">1. Parsing & Tailing (Drain3)</h4>
               <label className="block">
-                <span className="text-xs text-surface-400">DBSCAN Epsilon (Rayon $\epsilon$)</span>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="input mt-1"
-                  value={settings.detection.dbscan_eps}
-                  onChange={(e) => updateDetection({ dbscan_eps: parseFloat(e.target.value) || 0.5 })}
-                />
-                <p className="text-3xs text-surface-500 mt-1">Distance max entre deux logs pour être dans le même cluster</p>
-              </label>
-              <label className="block">
-                <span className="text-xs text-surface-400">DBSCAN Min Samples (Min $Pts$)</span>
+                <span className="text-xs text-surface-400">Taille du batch (nombre de logs par lot)</span>
                 <input
                   type="number"
                   className="input mt-1"
-                  value={settings.detection.dbscan_min_samples}
-                  onChange={(e) => updateDetection({ dbscan_min_samples: parseInt(e.target.value) || 5 })}
+                  value={settings.detection.batch_size}
+                  onChange={(e) => updateDetection({ batch_size: parseInt(e.target.value) || 500 })}
                 />
-                <p className="text-3xs text-surface-500 mt-1">Nombre min de voisins pour former un cluster dense</p>
+                <p className="text-3xs text-surface-500 mt-1">Nombre maximal de lignes analysées dans un cycle d'ingestion</p>
               </label>
-            </div>
 
-            <h4 className="text-xs font-semibold text-surface-300 uppercase tracking-wider pt-2">4. Corrélation Temporelle (Fenêtre Glissante)</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-xs text-surface-400">Fenêtre temporelle (secondes)</span>
-                <input
-                  type="number"
-                  className="input mt-1"
-                  value={settings.detection.time_window_seconds}
-                  onChange={(e) => updateDetection({ time_window_seconds: parseInt(e.target.value) || 60 })}
-                />
-                <p className="text-3xs text-surface-500 mt-1">Durée d'analyse pour la détection de rafales</p>
-              </label>
-              <label className="block">
-                <span className="text-xs text-surface-400">Seuil d'événements suspect</span>
-                <input
-                  type="number"
-                  className="input mt-1"
-                  value={settings.detection.event_threshold}
-                  onChange={(e) => updateDetection({ event_threshold: parseInt(e.target.value) || 10 })}
-                />
-                <p className="text-3xs text-surface-500 mt-1">Nombre max d'événements avant de lever une alerte</p>
-              </label>
-            </div>
+              <h4 className="text-xs font-semibold text-surface-300 uppercase tracking-wider pt-2">2. Détection d'Anomalies & Model Supervisé</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs text-surface-400">Seuil d'anomalie de fréquence</span>
+                  <input
+                    type="number"
+                    step="0.05"
+                    className="input mt-1"
+                    value={settings.detection.anomaly_threshold}
+                    onChange={(e) => updateDetection({ anomaly_threshold: parseFloat(e.target.value) || 0.3 })}
+                  />
+                  <p className="text-3xs text-surface-500 mt-1">Déclenche une alerte si la rareté dépasse ce seuil</p>
+                </label>
+                <label className="block">
+                  <span className="text-xs text-surface-400">Seuil du modèle supervisé (TF-IDF)</span>
+                  <input
+                    type="number"
+                    step="0.05"
+                    className="input mt-1"
+                    value={settings.detection.supervised_threshold}
+                    onChange={(e) => updateDetection({ supervised_threshold: parseFloat(e.target.value) || 0.6 })}
+                  />
+                  <p className="text-3xs text-surface-500 mt-1">Score min de correspondance avec les motifs connus</p>
+                </label>
+              </div>
 
-            <div className="pt-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.detection.auto_train}
-                  onChange={(e) => updateDetection({ auto_train: e.target.checked })}
-                  className="rounded bg-surface-700 border-surface-600"
-                />
-                <span className="text-sm font-medium">Ré-entraînement automatique périodique</span>
-              </label>
-              {settings.detection.auto_train && (
-                <label className="block mt-2">
-                  <span className="text-xs text-surface-400">Intervalle d'entraînement (heures)</span>
+              <h4 className="text-xs font-semibold text-surface-300 uppercase tracking-wider pt-2">3. Clustering DBSCAN (Outliers)</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs text-surface-400">DBSCAN Epsilon (Rayon $\epsilon$)</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    className="input mt-1"
+                    value={settings.detection.dbscan_eps}
+                    onChange={(e) => updateDetection({ dbscan_eps: parseFloat(e.target.value) || 0.5 })}
+                  />
+                  <p className="text-3xs text-surface-500 mt-1">Distance max entre deux logs pour être dans le même cluster</p>
+                </label>
+                <label className="block">
+                  <span className="text-xs text-surface-400">DBSCAN Min Samples (Min $Pts$)</span>
                   <input
                     type="number"
                     className="input mt-1"
-                    value={settings.detection.training_interval_hours}
-                    onChange={(e) => updateDetection({ training_interval_hours: parseInt(e.target.value) || 24 })}
+                    value={settings.detection.dbscan_min_samples}
+                    onChange={(e) => updateDetection({ dbscan_min_samples: parseInt(e.target.value) || 5 })}
                   />
+                  <p className="text-3xs text-surface-500 mt-1">Nombre min de voisins pour former un cluster dense</p>
                 </label>
-              )}
-            </div>
+              </div>
+
+              <h4 className="text-xs font-semibold text-surface-300 uppercase tracking-wider pt-2">4. Corrélation Temporelle (Fenêtre Glissante)</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs text-surface-400">Fenêtre temporelle (secondes)</span>
+                  <input
+                    type="number"
+                    className="input mt-1"
+                    value={settings.detection.time_window_seconds}
+                    onChange={(e) => updateDetection({ time_window_seconds: parseInt(e.target.value) || 60 })}
+                  />
+                  <p className="text-3xs text-surface-500 mt-1">Durée d'analyse pour la détection de rafales</p>
+                </label>
+                <label className="block">
+                  <span className="text-xs text-surface-400">Seuil d'événements suspect</span>
+                  <input
+                    type="number"
+                    className="input mt-1"
+                    value={settings.detection.event_threshold}
+                    onChange={(e) => updateDetection({ event_threshold: parseInt(e.target.value) || 10 })}
+                  />
+                  <p className="text-3xs text-surface-500 mt-1">Nombre max d'événements avant de lever une alerte</p>
+                </label>
+              </div>
+
+              <div className="pt-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={settings.detection.auto_train}
+                    onChange={(e) => updateDetection({ auto_train: e.target.checked })}
+                    className="rounded bg-surface-700 border-surface-600"
+                  />
+                  <span className="text-sm font-medium">Ré-entraînement automatique périodique</span>
+                </label>
+                {settings.detection.auto_train && (
+                  <label className="block mt-2">
+                    <span className="text-xs text-surface-400">Intervalle d'entraînement (heures)</span>
+                    <input
+                      type="number"
+                      className="input mt-1"
+                      value={settings.detection.training_interval_hours}
+                      onChange={(e) => updateDetection({ training_interval_hours: parseInt(e.target.value) || 24 })}
+                    />
+                  </label>
+                )}
+              </div>
             </div>
           </div>
 
@@ -754,9 +754,9 @@ export default function Configuration() {
                     ...settings,
                     kafka: {
                       brokers: ["localhost:9092"],
-                      input_topic: "defudolog-logs",
-                      output_topic: "defudolog-alerts",
-                      group_id: "defudolog-consumer",
+                      input_topic: "defudelog-logs",
+                      output_topic: "defudelog-alerts",
+                      group_id: "defudelog-consumer",
                       sasl_username: null,
                       sasl_password: null,
                     } as KafkaSettings,
@@ -834,12 +834,12 @@ export default function Configuration() {
               <div className="flex items-center gap-2">
                 <Brain size={18} className={settings.llm?.enabled ? "text-primary-400" : "text-surface-500"} />
                 <span className="font-semibold">Analyse LLM Local</span>
-                <InfoTooltip title="LLM Local (LM Studio / Ollama)" content="Connecte DeFuDoLog à votre IA locale. Vos logs ne quittent jamais votre machine !" />
+                <InfoTooltip title="LLM Local (LM Studio / Ollama)" content="Connecte DefuDelog à votre IA locale. Vos logs ne quittent jamais votre machine !" />
               </div>
               {settings.llm && (
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     className="sr-only peer"
                     checked={settings.llm.enabled}
                     onChange={(e) => updateLlm({ enabled: e.target.checked })}
@@ -848,24 +848,24 @@ export default function Configuration() {
                 </label>
               )}
             </div>
-            
+
             {settings.llm ? (
               <div className={`space-y-4 transition-all duration-300 ${!settings.llm.enabled ? 'opacity-50 pointer-events-none' : ''}`}>
                 <div className="flex gap-2">
-                  <button 
+                  <button
                     onClick={() => updateLlm({ base_url: "http://localhost:11434/v1", model: "llama3" })}
                     className="badge bg-surface-800 hover:bg-primary-900/40 text-surface-200 cursor-pointer border border-surface-700 flex items-center gap-1"
                   >
                     <Server size={12} /> Preset Ollama
                   </button>
-                  <button 
+                  <button
                     onClick={() => updateLlm({ base_url: "http://localhost:1234/v1", model: "local-model" })}
                     className="badge bg-surface-800 hover:bg-primary-900/40 text-surface-200 cursor-pointer border border-surface-700 flex items-center gap-1"
                   >
                     <Server size={12} /> Preset LM Studio
                   </button>
                 </div>
-                
+
                 <label className="block">
                   <span className="text-xs font-medium text-surface-300">URL de l'API (Endpoint compatible OpenAI)</span>
                   <input
@@ -876,7 +876,7 @@ export default function Configuration() {
                     placeholder="http://localhost:1234/v1"
                   />
                 </label>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <label className="block">
                     <span className="text-xs font-medium text-surface-300">Nom du Modèle</span>
@@ -887,7 +887,7 @@ export default function Configuration() {
                       onChange={(e) => updateLlm({ model: e.target.value })}
                     />
                   </label>
-                  
+
                   <label className="block relative">
                     <span className="text-xs font-medium text-surface-300">Clé API (Optionnelle)</span>
                     <div className="relative mt-1.5">
@@ -898,7 +898,7 @@ export default function Configuration() {
                         onChange={(e) => updateLlm({ api_key: e.target.value })}
                         placeholder="sk-..."
                       />
-                      <button 
+                      <button
                         type="button"
                         onClick={() => setShowApiKey(!showApiKey)}
                         className="absolute inset-y-0 right-0 pr-3 flex items-center text-surface-400 hover:text-white"
@@ -910,9 +910,9 @@ export default function Configuration() {
                 </div>
 
                 <div className="pt-2">
-                  <button 
-                    type="button" 
-                    onClick={testLlm} 
+                  <button
+                    type="button"
+                    onClick={testLlm}
                     disabled={llmTesting}
                     className="btn-secondary text-xs w-full justify-center flex items-center gap-2 border-surface-600 bg-surface-700 hover:bg-surface-600"
                   >
@@ -961,7 +961,7 @@ export default function Configuration() {
             </div>
 
             <p className="text-xs text-surface-400 leading-relaxed">
-              Le moteur sémantique de DeFuDoLog utilise un dictionnaire de gabarits structuré au format JSON pour vulgariser instantanément les logs bruts en français clair sans surcoût CPU ($O(1)$).
+              Le moteur sémantique de DefuDelog utilise un dictionnaire de gabarits structuré au format JSON pour vulgariser instantanément les logs bruts en français clair sans surcoût CPU ($O(1)$).
             </p>
 
             <div className="bg-surface-900/80 p-3 rounded-xl border border-surface-800 space-y-3">
@@ -1028,7 +1028,7 @@ export default function Configuration() {
               <p className="text-2xs text-surface-400 leading-relaxed">
                 Les mises à jour automatiques téléchargent et appliquent uniquement le nouveau binaire applicatif. Votre base de données SQLite locale, vos clés d'API, vos règles DLP et l'historique complet de vos logs restent 100% intacts dans le répertoire sécurisé de l'application.
               </p>
-              
+
               <div className="pt-2 border-t border-surface-800 flex items-center justify-between">
                 <span className="text-2xs text-surface-500 font-mono">
                   Canal de diffusion : GitHub Releases (Main Branch)
@@ -1041,7 +1041,7 @@ export default function Configuration() {
                       if (res && res.available) {
                         alert(`Nouvelle version v${res.version} disponible ! La notification de téléchargement a été affichée.`);
                       } else {
-                        alert("Votre application DeFuDoLog est déjà à jour (dernière version installée).");
+                        alert("Votre application DefuDelog est déjà à jour (dernière version installée).");
                       }
                     } catch (e) {
                       alert("Vérification terminée : Aucune mise à jour disponible ou serveur non accessible en environnement local.");

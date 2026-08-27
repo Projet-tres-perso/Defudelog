@@ -84,9 +84,9 @@ export default function App() {
       <aside className="w-56 flex-shrink-0 bg-surface-900 border-r border-surface-700 flex flex-col">
         <div className="p-4 border-b border-surface-700">
           <div className="flex items-center gap-3">
-            <img src={logo} alt="DeFuDoLog Logo" className="w-8 h-8 object-contain" />
+            <img src={logo} alt="DefuDelog Logo" className="w-8 h-8 object-contain" />
             <div>
-              <h1 className="text-sm font-bold tracking-tight text-white">DeFuDoLog</h1>
+              <h1 className="text-sm font-bold tracking-tight text-white">DefuDelog</h1>
               <p className="text-2xs text-surface-400">Detection Platform</p>
             </div>
           </div>
@@ -99,11 +99,10 @@ export default function App() {
               <NavLink
                 key={to}
                 to={to}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-100 ${
-                  isActive
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-100 ${isActive
                     ? "bg-primary-600/15 text-primary-400"
                     : "text-surface-400 hover:bg-surface-800 hover:text-surface-200"
-                }`}
+                  }`}
               >
                 <Icon size={18} />
                 {label}

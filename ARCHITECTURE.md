@@ -1,8 +1,8 @@
-# DeFuDoLog v2.3 — Architecture Document
+# DeFuDeLog v2.3 — Architecture Document
 
 ## 1. Vision & Objectifs
 
-**DeFuDoLog v2.3** est une plateforme native de détection de fuites de données (Data Leak Prevention - DLP), de gestion des événements de sécurité (SIEM/SOAR), d'interprétation sémantique multi-niveaux et de surveillance réseau distribuée.
+**DeFuDeLog v2.3** est une plateforme native de détection de fuites de données (Data Leak Prevention - DLP), de gestion des événements de sécurité (SIEM/SOAR), d'interprétation sémantique multi-niveaux et de surveillance réseau distribuée.
 
 Elle résout les limitations historiques des systèmes à base de règles statiques grâce à :
 - **Un Moteur Sémantique Multi-Niveaux & Rétroaction $O(1)$** : Décodage en 3 volets (*Sens Métier Immédiat*, *Explication Didactique Détaillée*, *Recommandation SOC*), variables nommées typées (`{user}`, `{ip}`, `{port}`...), tolérance floue Jaccard, persistance SQLite des surcharges utilisateur et mise à jour OTA sans recompilation.
@@ -124,12 +124,12 @@ Le composant `web_server.rs` implémente un serveur HTTP asynchrone autonome :
                │
                ▼ (Topic entrant: logs)
 ┌─────────────────────────────────────────────────────────────┐
-│                      DeFuDoLog v2.1                         │
+│                      DeFuDeLog v2.1                         │
 │  - Pipeline d'analyse multi-axes                            │
 │  - Normalisation & vectorisation                            │
 │  - Détection d'exfiltration DLP                             │
 └─────────────────────────────┬───────────────────────────────┘
-                              │ (Topic sortant: defudolog-alerts)
+                              │ (Topic sortant: defudelog-alerts)
                               ▼
 [ SIEM / SOC Central (Splunk, Elastic, Microsoft Sentinel) ]
 ```
@@ -140,4 +140,4 @@ Le composant `web_server.rs` implémente un serveur HTTP asynchrone autonome :
 
 Sous Windows, le script `nsis_hooks.nsh` intervient lors du désabonnement de l'application :
 - Invite interactive `MessageBox MB_YESNO` pour confirmer la suppression des données.
-- Purge récursive de `%APPDATA%\defudolog` et `%LOCALAPPDATA%\defudolog` garantissant l'absence de traces résiduelles sur l'hôte.
+- Purge récursive de `%APPDATA%\defudelog` et `%LOCALAPPDATA%\defudelog` garantissant l'absence de traces résiduelles sur l'hôte.
