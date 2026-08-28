@@ -55,7 +55,7 @@ export default function Configuration() {
     setUpdateChecking(true);
     try {
       window.dispatchEvent(new CustomEvent("defudelog-check-update"));
-      
+
       // Tentative via la commande backend Rust native
       let updateInfo: { available: boolean; version?: string; body?: string } | null = null;
       try {
@@ -731,8 +731,8 @@ export default function Configuration() {
                   </span>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-3">
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs text-surface-400 whitespace-nowrap">Purger les logs de plus de :</span>
                     <input
                       type="number"
@@ -744,17 +744,16 @@ export default function Configuration() {
                     />
                     <span className="text-xs text-surface-400">jours</span>
                   </div>
-                  <div>
-                    <button
-                      type="button"
-                      onClick={handleManualPurge}
-                      disabled={purging}
-                      className="btn bg-red-600/80 hover:bg-red-600 text-white text-xs px-4 py-2 w-full sm:w-auto ml-auto flex items-center justify-center gap-1.5 transition"
-                    >
-                      <Trash2 size={14} />
-                      {purging ? "Purge en cours..." : "Purger Maintenant"}
-                    </button>
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleManualPurge}
+                    disabled={purging}
+                    className="btn bg-red-600 hover:bg-red-500 text-white text-xs px-4 py-2 w-full sm:w-auto shrink-0 flex items-center justify-center gap-1.5 shadow-md shadow-red-600/20 transition"
+                  >
+                    <Trash2 size={14} />
+                    <span>{purging ? "Purge en cours..." : "Purger Maintenant"}</span>
+                  </button>
                 </div>
 
                 {purgeResult && (
@@ -1081,13 +1080,13 @@ export default function Configuration() {
 
           {/* Mises à jour Logicielles Automatiques (OTA) & Intégrité des Données */}
           <div className="card space-y-4 border border-surface-700/80">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <h3 className="font-semibold text-sm flex items-center gap-2">
-                <Sparkles size={16} className="text-primary-400" />
+                <Sparkles size={16} className="text-primary-400 shrink-0" />
                 <span>Mises à Jour Logicielles & Maintien Automatique</span>
               </h3>
-              <div className="flex items-center gap-2">
-                <span className="badge bg-primary-500/10 text-primary-400 text-2xs border border-primary-500/30 font-mono">
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="badge bg-primary-500/10 text-primary-400 text-2xs border border-primary-500/30 font-mono whitespace-nowrap">
                   Version Actuelle : v2.0.0
                 </span>
               </div>
