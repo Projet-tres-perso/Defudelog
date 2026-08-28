@@ -1,4 +1,4 @@
-# DefuDelog v2.3 — Data Leak Detection, Semantic SIEM & Incident Response Platform
+# DefuDelog v2.3 — Risque de Fuite de Données, SIEM Sémantique & Réponse aux Incidents
 
 [![Release](https://img.shields.io/github/v/release/Projet-tres-perso/Defudelog?style=flat-square&color=blue)](https://github.com/Projet-tres-perso/Defudelog/releases)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/Projet-tres-perso/Defudelog/release.yml?branch=main&style=flat-square)](https://github.com/Projet-tres-perso/Defudelog/actions)
@@ -6,7 +6,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-24C8D8?style=flat-square&logo=tauri)](https://tauri.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-**DefuDelog v2.3** est une plateforme de détection de fuite de données (DLP), d'analyse sémantique de journaux d'événements et de réponse aux incidents (SIEM/SOAR). Conçue en **Rust** et **Tauri/React**, elle combine une analyse multi-couches à haute cadence ($> 20\,000\text{ logs/s}$), une vulgarisation sémantique multi-niveaux en français clair accessible aux équipes métiers et aux analystes SOC, et un respect absolu de la confidentialité des données (fonctionnement 100% autonome et local).
+**DefuDelog v2.3** est une plateforme de détection des risques de fuite de données (DLP), d'analyse sémantique de journaux d'événements et de réponse aux incidents (SIEM/SOAR). Conçue en **Rust** et **Tauri/React**, elle combine une analyse multi-couches à haute cadence ($> 20\,000\text{ logs/s}$), une vulgarisation sémantique multi-niveaux en français clair accessible aux équipes métiers et aux analystes SOC, et un respect absolu de la confidentialité des données (fonctionnement 100% autonome et local).
 
 ---
 

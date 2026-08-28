@@ -15,12 +15,12 @@ fn setup_test_engine() -> (DetectionPipeline, Arc<Database>) {
         let source = LogSource {
             id: src_id.to_string(),
             name: format!("Test Source {}", src_id),
-            source_type: SourceType::FileWatcher { path: "/var/log/test.log".to_string(), pattern: Some("*.log".to_string()) },
+            source_type: SourceType::FileWatcher { path: format!("/var/log/{}.log", src_id), pattern: Some("*.log".to_string()) },
             hostname: "test-host".to_string(),
             os: "linux".to_string(),
             enabled: true,
             priority: "normal".to_string(),
-            config: serde_json::json!({}),
+            config: serde_json::json!({ "path": format!("/var/log/{}.log", src_id) }),
             created_at: now,
             updated_at: now,
         };

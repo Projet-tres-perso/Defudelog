@@ -165,7 +165,7 @@ $$\text{Probabilité Combinée } P(\text{Détection}) = 1 - \prod_{i} (1 - P_i)$
 
 | Type de Menace / Log Suspect | Moteurs Déclencheurs Mobilisés | Probabilité de Détection | Niveau d'Alerte Résultant |
 |---|---|:---:|:---:|
-| **1. Fuite de Données / Exfiltration (DLP)**<br>*(dump SQL/CSV, upload S3, transfert cartes bancaires, fuite clé .pem)* | DLP Signatures + BGE Sémantique + Drain Critical + HDBSCAN | **99.8 %** | 🔴 **High** (SOAR, Kafka & Webhooks) |
+| **1. Risque de Fuite de Données / Exfiltration (DLP)**<br>*(dump SQL/CSV, upload S3, transfert cartes bancaires, fuite clé .pem)* | DLP Signatures + BGE Sémantique + Drain Critical + HDBSCAN | **99.8 %** | 🔴 **High** (SOAR, Kafka & Webhooks) |
 | **2. Élévation de Privilèges**<br>*(chmod 777 /etc/shadow, sudoers, altération root)* | DLP Signatures + Drain Critical + BGE Sémantique | **99.4 %** | 🔴 **High** |
 | **3. Attaque Force Brute / Authentification**<br>*(rafale sshd failed password, credential spraying PAM)* | Corrélation Temporelle + Drain Warning + BGE Auth Profile | **97.6 %** | 🟠 **Moderate** / 🔴 **High** |
 | **4. Défaillance / Crash Système**<br>*(Out of Memory, kernel panic, segfault, HTTP 500)* | Drain Warning + BGE Sémantique + Signatures | **94.8 %** | 🟠 **Moderate** |

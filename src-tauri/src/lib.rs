@@ -209,6 +209,8 @@ pub fn run() {
             commands::reload_translation_dictionary,
             commands::load_custom_translation_file,
             commands::sync_remote_dictionary,
+            commands::check_for_updates_backend,
+            commands::install_update_backend,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DefuDelog");
