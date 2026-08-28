@@ -20,8 +20,8 @@ use web_server::LanWebServer;
 use parking_lot::Mutex;
 use std::sync::Arc;
 use tauri::Manager;
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
-use tauri::tray::TrayIconBuilder;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton};
 
 pub struct AppState {
     pub db: Arc<Database>,
@@ -119,10 +119,10 @@ pub fn run() {
             app.manage(app_state);
 
             // Configuration du System Tray (Zone de notification)
-            let show_i = MenuItemBuilder::with_id("show", "Ouvrir DefuDelog").build(app)?;
-            let status_i = MenuItemBuilder::with_id("status", "Protection & Surveillance Active").enabled(false).build(app)?;
-            let quit_i = MenuItemBuilder::with_id("quit", "Quitter Définitivement").build(app)?;
-            let menu = MenuBuilder::new(app).items(&[&show_i, &status_i, &quit_i]).build()?;
+            let show_i = MenuItem::with_id(app, "show", "Ouvrir DefuDelog (Console)", true, None::<&str>)?;
+            let widget_i = MenuItem::with_id(app, "widget", "Mini-Widget Bureau (HUD)", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quitter l'application", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_i, &widget_i, &quit_i])?;
 
             let tray_icon = app.default_window_icon().cloned()
                 .expect("No default window icon configured in tauri.conf.json");
@@ -136,7 +136,19 @@ pub fn run() {
                         "show" => {
                             if let Some(window) = app.get_webview_window("main") {
                                 let _ = window.show();
+                                let _ = window.unminimize();
                                 let _ = window.set_focus();
+                            }
+                        }
+                        "widget" => {
+                            if let Some(widget_win) = app.get_webview_window("widget") {
+                                let is_vis = widget_win.is_visible().unwrap_or(false);
+                                if is_vis {
+                                    let _ = widget_win.hide();
+                                } else {
+                                    let _ = widget_win.show();
+                                    let _ = widget_win.set_focus();
+                                }
                             }
                         }
                         "quit" => {
@@ -146,10 +158,11 @@ pub fn run() {
                     }
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = event {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, .. } = event {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
+                            let _ = window.unminimize();
                             let _ = window.set_focus();
                         }
                     }
@@ -211,6 +224,9 @@ pub fn run() {
             commands::sync_remote_dictionary,
             commands::check_for_updates_backend,
             commands::install_update_backend,
+            commands::toggle_desktop_widget,
+            commands::is_desktop_widget_open,
+            commands::focus_main_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DefuDelog");

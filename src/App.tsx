@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Routes, Route, NavLink, useLocation } from "react-router-dom";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { listen } from "@tauri-apps/api/event";
 import logo from "./assets/logo.png";
 import {
@@ -10,6 +12,7 @@ import {
   Radio,
   FileText,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import Dashboard from "./pages/Dashboard";
 import LogViewer from "./pages/LogViewer";
@@ -18,6 +21,7 @@ import Configuration from "./pages/Configuration";
 import Sources from "./pages/Sources";
 import Reports from "./pages/Reports";
 import Rules from "./pages/Rules";
+import DesktopWidget from "./pages/DesktopWidget";
 import UpdateNotification from "./components/UpdateNotification";
 
 const navItems = [
@@ -32,9 +36,21 @@ const navItems = [
 
 export default function App() {
   const location = useLocation();
+  const [isWidgetWindow, setIsWidgetWindow] = useState(false);
   const [mlStatus, setMlStatus] = useState<"loading" | "ready" | "error">("ready");
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [availableUpdateVersion, setAvailableUpdateVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const win = getCurrentWebviewWindow();
+      if (win && win.label === "widget") {
+        setIsWidgetWindow(true);
+      }
+    } catch {
+      // Fallback
+    }
+  }, []);
 
   useEffect(() => {
     const unlistenLoading = listen("ml-loading", () => setMlStatus("loading"));
@@ -70,6 +86,14 @@ export default function App() {
       window.removeEventListener("defudelog-update-not-found", handleUpdateNotFound);
     };
   }, []);
+
+  if (isWidgetWindow) {
+    return (
+      <div className="w-screen h-screen bg-transparent overflow-hidden">
+        <DesktopWidget />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -138,6 +162,20 @@ export default function App() {
         </nav>
 
         <div className="p-3 border-t border-surface-700 space-y-2">
+          {/* Desktop HUD Widget Shortcut Button */}
+          <button
+            type="button"
+            onClick={() => invoke("toggle_desktop_widget", { show: true })}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold text-primary-300 bg-primary-950/50 border border-primary-500/30 hover:bg-primary-900/50 hover:border-primary-500/50 transition-all shadow-sm group"
+            title="Ouvrir le Mini-Widget Bureau flottant"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles size={14} className="text-primary-400 group-hover:scale-110 transition-transform" />
+              <span>Widget Bureau</span>
+            </div>
+            <span className="text-3xs bg-primary-500/20 px-1.5 py-0.5 rounded text-primary-300 font-mono">HUD</span>
+          </button>
+
           {availableUpdateVersion && (
             <NavLink
               to="/config"

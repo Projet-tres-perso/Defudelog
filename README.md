@@ -1,4 +1,4 @@
-# DefuDelog v2.3 — Risque de Fuite de Données, SIEM Sémantique & Réponse aux Incidents
+# DefuDelog v2.3 — Détection de risque de Fuite de Données, SIEM Sémantique & Réponse aux Incidents
 
 [![Release](https://img.shields.io/github/v/release/Projet-tres-perso/Defudelog?style=flat-square&color=blue)](https://github.com/Projet-tres-perso/Defudelog/releases)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/Projet-tres-perso/Defudelog/release.yml?branch=main&style=flat-square)](https://github.com/Projet-tres-perso/Defudelog/actions)

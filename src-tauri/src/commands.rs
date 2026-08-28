@@ -846,4 +846,47 @@ pub async fn install_update_backend(app: tauri::AppHandle) -> Result<bool, Strin
     }
 }
 
+#[tauri::command]
+pub fn toggle_desktop_widget(app: tauri::AppHandle, show: Option<bool>) -> Result<bool, String> {
+    use tauri::Manager;
+    if let Some(widget_window) = app.get_webview_window("widget") {
+        let is_vis = widget_window.is_visible().unwrap_or(false);
+        let should_show = show.unwrap_or(!is_vis);
+
+        if should_show {
+            let _ = widget_window.show();
+            let _ = widget_window.set_focus();
+        } else {
+            let _ = widget_window.hide();
+        }
+        Ok(should_show)
+    } else {
+        Err("Fenêtre widget introuvable".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn is_desktop_widget_open(app: tauri::AppHandle) -> Result<bool, String> {
+    use tauri::Manager;
+    if let Some(widget_window) = app.get_webview_window("widget") {
+        Ok(widget_window.is_visible().unwrap_or(false))
+    } else {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+pub fn focus_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(main_window) = app.get_webview_window("main") {
+        let _ = main_window.show();
+        let _ = main_window.unminimize();
+        let _ = main_window.set_focus();
+        Ok(())
+    } else {
+        Err("Fenêtre principale introuvable".to_string())
+    }
+}
+
+
 

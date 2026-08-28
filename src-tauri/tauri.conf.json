@@ -12,6 +12,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
         "title": "DefuDelog — Risque de Fuite de Données",
         "width": 1440,
         "height": 900,
@@ -21,6 +22,19 @@
         "fullscreen": false,
         "center": true,
         "decorations": true
+      },
+      {
+        "label": "widget",
+        "title": "DefuDelog Mini HUD",
+        "width": 340,
+        "height": 235,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "shadow": true
       }
     ],
     "security": {
