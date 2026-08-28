@@ -22,7 +22,7 @@ const levelConfig: Record<AlertLevel, { icon: typeof AlertTriangle; className: s
 };
 
 const categoryConfig: Record<AlertCategory, { icon: typeof ShieldAlert; label: string; color: string }> = {
-  data_leak: { icon: ShieldAlert, label: "Fuite de données", color: "bg-red-500/15 text-red-400 border-red-500/30" },
+  data_leak: { icon: ShieldAlert, label: "Risque de fuite de données", color: "bg-red-500/15 text-red-400 border-red-500/30" },
   authentication: { icon: KeyRound, label: "Authentification", color: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
   system_anomaly: { icon: Cpu, label: "Système / Panne", color: "bg-purple-500/15 text-purple-400 border-purple-500/30" },
   privilege_escalation: { icon: Lock, label: "Privilèges", color: "bg-rose-500/15 text-rose-400 border-rose-500/30" },

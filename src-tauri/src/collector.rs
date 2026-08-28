@@ -290,7 +290,7 @@ impl LogCollector {
         thread::spawn(move || {
             // Lecture initiale des 25 derniers événements existants pour éviter le cold-start vide
             let init_script = format!(
-                r#"Get-WinEvent -LogName '{}' -MaxEvents 25 | Sort-Object TimeCreated | ForEach-Object {{ $_.TimeCreated.ToString('yyyy-MM-ddTHH:mm:ssZ') + ' [' + $_.LevelDisplayName + '] EventID=' + $_.Id + ' Provider=' + $_.ProviderName + ' ' + ($_.Message -replace '[\r\n]+', ' ') }}"#,
+                r#"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::InputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-WinEvent -LogName '{}' -MaxEvents 25 | Sort-Object TimeCreated | ForEach-Object {{ $_.TimeCreated.ToString('yyyy-MM-ddTHH:mm:ssZ') + ' [' + $_.LevelDisplayName + '] EventID=' + $_.Id + ' Provider=' + $_.ProviderName + ' ' + ($_.Message -replace '[\r\n]+', ' ') }}"#,
                 channel
             );
 
@@ -336,7 +336,7 @@ impl LogCollector {
 
             // Suivi en continu des nouveaux événements
             let loop_script = format!(
-                r#"$lastTime = (Get-Date).AddSeconds(-5); while($true) {{ $events = Get-WinEvent -FilterHashtable @{{LogName='{}'; StartTime=$lastTime}} -ErrorAction SilentlyContinue | Sort-Object TimeCreated; if ($events) {{ foreach ($e in $events) {{ $msg = $e.TimeCreated.ToString('yyyy-MM-ddTHH:mm:ssZ') + ' [' + $e.LevelDisplayName + '] EventID=' + $e.Id + ' Provider=' + $e.ProviderName + ' ' + ($e.Message -replace '[\r\n]+', ' '); [Console]::WriteLine($msg); }}; $lastTime = (Get-Date); }}; Start-Sleep -Milliseconds 1500; }}"#,
+                r#"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::InputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; $lastTime = (Get-Date).AddSeconds(-5); while($true) {{ $events = Get-WinEvent -FilterHashtable @{{LogName='{}'; StartTime=$lastTime}} -ErrorAction SilentlyContinue | Sort-Object TimeCreated; if ($events) {{ foreach ($e in $events) {{ $msg = $e.TimeCreated.ToString('yyyy-MM-ddTHH:mm:ssZ') + ' [' + $e.LevelDisplayName + '] EventID=' + $e.Id + ' Provider=' + $e.ProviderName + ' ' + ($e.Message -replace '[\r\n]+', ' '); [Console]::WriteLine($msg); }}; $lastTime = (Get-Date); }}; Start-Sleep -Milliseconds 1500; }}"#,
                 channel
             );
 

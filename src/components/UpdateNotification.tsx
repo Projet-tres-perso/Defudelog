@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { Sparkles, Download, RefreshCw, X, CheckCircle2, AlertCircle, ChevronUp } from "lucide-react";
 
 export default function UpdateNotification() {
   const [update, setUpdate] = useState<Update | null>(null);
+  const [backendUpdateInfo, setBackendUpdateInfo] = useState<{ version: string; body?: string } | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState<number>(0);
   const [downloaded, setDownloaded] = useState(false);
@@ -12,12 +14,28 @@ export default function UpdateNotification() {
 
   const checkForUpdates = useCallback(async (notifyIfNone = false) => {
     try {
-      const updateResult = await check();
+      // 1. Essayer le plugin-updater standard
+      let updateResult: Update | null = null;
+      try {
+        updateResult = await check();
+      } catch (plugErr) {
+        console.debug("plugin-updater check error, fallback to backend:", plugErr);
+      }
+
       if (updateResult && updateResult.available) {
         setUpdate(updateResult);
+        setBackendUpdateInfo({ version: updateResult.version, body: updateResult.body || undefined });
         setMinimized(false);
-        // Informer l'application globale (ex: Sidebar) qu'une mise à jour est disponible
         window.dispatchEvent(new CustomEvent("defudelog-update-found", { detail: { version: updateResult.version } }));
+        return;
+      }
+
+      // 2. Fallback backend Rust natif
+      const backendRes = await invoke<{ available: boolean; version?: string; body?: string }>("check_for_updates_backend");
+      if (backendRes && backendRes.available && backendRes.version) {
+        setBackendUpdateInfo({ version: backendRes.version, body: backendRes.body || undefined });
+        setMinimized(false);
+        window.dispatchEvent(new CustomEvent("defudelog-update-found", { detail: { version: backendRes.version } }));
       } else {
         window.dispatchEvent(new CustomEvent("defudelog-update-not-found"));
         if (notifyIfNone) {
@@ -25,7 +43,7 @@ export default function UpdateNotification() {
         }
       }
     } catch (e) {
-      console.debug("Vérification mise à jour (Tauri Updater):", e);
+      console.debug("Vérification mise à jour:", e);
       window.dispatchEvent(new CustomEvent("defudelog-update-error", { detail: String(e) }));
     }
   }, []);
@@ -33,14 +51,11 @@ export default function UpdateNotification() {
   useEffect(() => {
     checkForUpdates();
 
-    // Écouter les requêtes de vérification manuelle provenant de la page Configuration
     const handleTriggerCheck = () => {
       checkForUpdates(true);
     };
 
     window.addEventListener("defudelog-check-update", handleTriggerCheck);
-
-    // Vérification périodique toutes les 4 heures
     const interval = setInterval(() => checkForUpdates(false), 4 * 60 * 60 * 1000);
 
     return () => {
@@ -50,31 +65,35 @@ export default function UpdateNotification() {
   }, [checkForUpdates]);
 
   const handleInstallUpdate = async () => {
-    if (!update) return;
     setDownloading(true);
     setErrorMsg(null);
     setProgress(0);
 
     try {
-      let downloadedBytes = 0;
-      let totalBytes = 0;
+      if (update) {
+        let downloadedBytes = 0;
+        let totalBytes = 0;
 
-      await update.downloadAndInstall((event) => {
-        switch (event.event) {
-          case "Started":
-            totalBytes = event.data.contentLength || 0;
-            break;
-          case "Progress":
-            downloadedBytes += event.data.chunkLength;
-            if (totalBytes > 0) {
-              setProgress(Math.round((downloadedBytes / totalBytes) * 100));
-            }
-            break;
-          case "Finished":
-            setDownloaded(true);
-            break;
-        }
-      });
+        await update.downloadAndInstall((event) => {
+          switch (event.event) {
+            case "Started":
+              totalBytes = event.data.contentLength || 0;
+              break;
+            case "Progress":
+              downloadedBytes += event.data.chunkLength;
+              if (totalBytes > 0) {
+                setProgress(Math.round((downloadedBytes / totalBytes) * 100));
+              }
+              break;
+            case "Finished":
+              setDownloaded(true);
+              break;
+          }
+        });
+      } else {
+        // Installation via backend Rust
+        await invoke("install_update_backend");
+      }
 
       setDownloaded(true);
     } catch (e) {
@@ -84,7 +103,10 @@ export default function UpdateNotification() {
     }
   };
 
-  if (!update) return null;
+  const activeVersion = update?.version || backendUpdateInfo?.version;
+  const activeBody = update?.body || backendUpdateInfo?.body;
+
+  if (!activeVersion) return null;
 
   // Si l'utilisateur a minimisé la boîte, afficher une pastille compacte et élégante
   if (minimized) {
@@ -96,7 +118,7 @@ export default function UpdateNotification() {
         title="Ouvrir la notification de mise à jour"
       >
         <Sparkles size={14} className="text-yellow-300" />
-        <span>Mise à jour v{update.version} disponible !</span>
+        <span>Mise à jour v{activeVersion} disponible !</span>
         <ChevronUp size={14} />
       </button>
     );
@@ -115,7 +137,7 @@ export default function UpdateNotification() {
               <h4 className="text-xs font-bold text-white flex items-center gap-2">
                 <span>Mise à jour disponible</span>
                 <span className="badge bg-emerald-500/20 text-emerald-300 text-3xs font-mono">
-                  v{update.version}
+                  v{activeVersion}
                 </span>
               </h4>
               <p className="text-3xs text-surface-400">
@@ -137,9 +159,9 @@ export default function UpdateNotification() {
         </div>
 
         {/* Release Notes Preview */}
-        {update.body && (
+        {activeBody && (
           <div className="bg-surface-950/60 rounded-xl p-2.5 text-2xs text-surface-300 max-h-24 overflow-y-auto border border-surface-800 font-sans leading-relaxed">
-            {update.body}
+            {activeBody}
           </div>
         )}
 

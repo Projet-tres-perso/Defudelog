@@ -171,7 +171,7 @@ pub struct LogEmbedding {
     pub created_at: DateTime<Utc>,
 }
 
-/// Résultat du clustering DBSCAN
+/// Résultat du clustering HDBSCAN
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusterResult {
     pub id: String,

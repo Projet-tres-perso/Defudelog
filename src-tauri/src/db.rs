@@ -226,22 +226,60 @@ impl Database {
 
     pub fn insert_log_source(&self, source: &LogSource) -> Result<(), AppError> {
         let conn = self.conn.lock();
-        conn.execute(
-            "INSERT OR REPLACE INTO log_sources (id, name, source_type, hostname, os, enabled, priority, config, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![
-                source.id,
-                source.name,
-                source.source_type.to_string(),
-                source.hostname,
-                source.os,
-                source.enabled as i32,
-                source.priority,
-                serde_json::to_string(&source.config)?,
-                source.created_at.to_rfc3339(),
-                source.updated_at.to_rfc3339(),
-            ],
-        )?;
+        let config_str = serde_json::to_string(&source.config)?;
+        let source_type_str = source.source_type.to_string();
+
+        // Vérifier s'il existe déjà une source avec le même ID OU le même nom et type
+        let existing_id: Option<String> = conn.query_row(
+            "SELECT id FROM log_sources WHERE id = ?1 OR (name = ?2 AND source_type = ?3) LIMIT 1",
+            params![source.id, source.name, source_type_str],
+            |row| row.get(0),
+        ).ok();
+
+        if let Some(ref eid) = existing_id {
+            // Mettre à jour la source existante au lieu de créer un doublon
+            conn.execute(
+                "UPDATE log_sources SET name = ?1, source_type = ?2, hostname = ?3, os = ?4, enabled = ?5, priority = ?6, config = ?7, updated_at = ?8
+                 WHERE id = ?9",
+                params![
+                    source.name,
+                    source_type_str,
+                    source.hostname,
+                    source.os,
+                    source.enabled as i32,
+                    source.priority,
+                    config_str,
+                    source.updated_at.to_rfc3339(),
+                    eid,
+                ],
+            )?;
+        } else {
+            conn.execute(
+                "INSERT INTO log_sources (id, name, source_type, hostname, os, enabled, priority, config, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    source.id,
+                    source.name,
+                    source_type_str,
+                    source.hostname,
+                    source.os,
+                    source.enabled as i32,
+                    source.priority,
+                    config_str,
+                    source.created_at.to_rfc3339(),
+                    source.updated_at.to_rfc3339(),
+                ],
+            )?;
+        }
+
+        // Nettoyage immédiat des éventuels doublons orphelins résiduels
+        let _ = conn.execute(
+            "DELETE FROM log_sources WHERE id NOT IN (
+                SELECT MIN(id) FROM log_sources GROUP BY name, source_type, config
+            )",
+            [],
+        );
+
         Ok(())
     }
 

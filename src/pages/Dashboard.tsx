@@ -183,7 +183,7 @@ export default function Dashboard() {
   ];
 
   const threatCategories = [
-    { key: "data_leak" as AlertCategory, label: "Fuite de données", icon: ShieldAlert, color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/30" },
+    { key: "data_leak" as AlertCategory, label: "Risque de fuite de données", icon: ShieldAlert, color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/30" },
     { key: "authentication" as AlertCategory, label: "Authentification / Force-brute", icon: KeyRound, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/30" },
     { key: "system_anomaly" as AlertCategory, label: "Anomalies système", icon: Cpu, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/30" },
     { key: "privilege_escalation" as AlertCategory, label: "Élévation de privilèges", icon: Lock, color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/30" },

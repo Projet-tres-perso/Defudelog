@@ -55,16 +55,28 @@ export default function Configuration() {
     setUpdateChecking(true);
     try {
       window.dispatchEvent(new CustomEvent("defudelog-check-update"));
-      const res = await check();
+      
+      // Tentative via la commande backend Rust native
+      let updateInfo: { available: boolean; version?: string; body?: string } | null = null;
+      try {
+        updateInfo = await invoke<{ available: boolean; version?: string; body?: string }>("check_for_updates_backend");
+      } catch (backendErr) {
+        console.debug("Backend updater check error, trying plugin-updater fallback:", backendErr);
+        const res = await check();
+        if (res) {
+          updateInfo = { available: res.available, version: res.version, body: res.body || undefined };
+        }
+      }
+
       const nowStr = new Date().toLocaleTimeString();
 
-      if (res && res.available) {
+      if (updateInfo && updateInfo.available) {
         setUpdateStatus({
           type: "update-available",
-          version: res.version,
-          body: res.body || undefined,
+          version: updateInfo.version,
+          body: updateInfo.body || undefined,
           checkedAt: nowStr,
-          message: `Nouvelle version v${res.version} disponible ! La notification de téléchargement est prête.`,
+          message: `Nouvelle version v${updateInfo.version} disponible ! La mise à jour est prête à être installée.`,
         });
       } else {
         setUpdateStatus({
@@ -292,28 +304,30 @@ export default function Configuration() {
                 </label>
               </div>
 
-              <h4 className="text-xs font-semibold text-surface-300 uppercase tracking-wider pt-2">3. Clustering DBSCAN (Outliers)</h4>
-              <div className="grid grid-cols-2 gap-3">
+              <h4 className="text-xs font-semibold text-surface-300 uppercase tracking-wider pt-2">3. Clustering HDBSCAN (Outliers)</h4>
+              <div className="grid grid-cols-2 gap-4">
                 <label className="block">
-                  <span className="text-xs text-surface-400">DBSCAN Epsilon (Rayon $\epsilon$)</span>
+                  <span className="text-xs text-surface-400">HDBSCAN Epsilon / Densité ($\epsilon$)</span>
                   <input
                     type="number"
-                    step="0.1"
+                    step="0.05"
+                    min="0.1"
+                    max="2.0"
                     className="input mt-1"
                     value={settings.detection.dbscan_eps}
                     onChange={(e) => updateDetection({ dbscan_eps: parseFloat(e.target.value) || 0.5 })}
                   />
-                  <p className="text-3xs text-surface-500 mt-1">Distance max entre deux logs pour être dans le même cluster</p>
                 </label>
                 <label className="block">
-                  <span className="text-xs text-surface-400">DBSCAN Min Samples (Min $Pts$)</span>
+                  <span className="text-xs text-surface-400">HDBSCAN Min Samples (Min $Pts$)</span>
                   <input
                     type="number"
+                    min="2"
+                    max="50"
                     className="input mt-1"
                     value={settings.detection.dbscan_min_samples}
                     onChange={(e) => updateDetection({ dbscan_min_samples: parseInt(e.target.value) || 5 })}
                   />
-                  <p className="text-3xs text-surface-500 mt-1">Nombre min de voisins pour former un cluster dense</p>
                 </label>
               </div>
 
@@ -470,21 +484,11 @@ export default function Configuration() {
                         setCopiedLanUrl(true);
                         setTimeout(() => setCopiedLanUrl(false), 2500);
                       }}
-                      className="btn-secondary text-xs px-3 py-2 flex items-center gap-1.5 bg-blue-900/40 border-blue-700/50 hover:bg-blue-800/50 text-blue-200"
+                      className="btn-primary text-xs px-3.5 py-2 flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/20"
                     >
-                      {copiedLanUrl ? <CheckCheck size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                      <span>{copiedLanUrl ? "URL Copiée !" : "Copier l'URL"}</span>
+                      {copiedLanUrl ? <CheckCheck size={14} className="text-emerald-300" /> : <Copy size={14} />}
+                      <span>{copiedLanUrl ? "URL Copiée !" : "Copier l'URL Réseau"}</span>
                     </button>
-                    <a
-                      href={lanStatus?.url || `http://${lanStatus?.local_ip || "127.0.0.1"}:${settings.lan_server.port}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn-primary text-xs px-3.5 py-2 flex items-center gap-1.5 shadow-lg shadow-blue-500/20"
-                      title="Ouvre la console web distante dans votre navigateur par défaut pour tester l'accès réseau et la saisie de clé."
-                    >
-                      <ExternalLink size={14} />
-                      <span>Ouvrir la Console (Navigateur)</span>
-                    </a>
                   </div>
                 </div>
 

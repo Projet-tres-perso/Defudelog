@@ -10,13 +10,9 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": false
-    },
     "windows": [
       {
-        "title": "DefuDelog — Data Leak Detection",
+        "title": "DefuDelog — Risque de Fuite de Données",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,
@@ -39,13 +35,12 @@
       "icons/64x64.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/icon.png",
-      "icons/icon.ico",
-      "icons/icon.icns"
+      "icons/icon.icns",
+      "icons/icon.ico"
     ],
     "category": "DeveloperTool",
-    "shortDescription": "Plateforme de détection de fuite de données",
-    "longDescription": "DefuDelog est une plateforme desktop de détection de fuite de données par analyse multi-couche de logs (parsing, embeddings, clustering, détection d'anomalies).",
+    "shortDescription": "Plateforme de détection des risques de fuite de données",
+    "longDescription": "DefuDelog est une plateforme desktop de détection des risques de fuite de données par analyse multi-couche de logs (parsing, embeddings, clustering HDBSCAN, détection d'anomalies).",
     "windows": {
       "nsis": {
         "installerHooks": "nsis_hooks.nsh"

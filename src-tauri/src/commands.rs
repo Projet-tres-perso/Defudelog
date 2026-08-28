@@ -794,3 +794,56 @@ pub async fn sync_remote_dictionary(
     state.translator.sync_remote_dictionary(&target_url).await
 }
 
+#[tauri::command]
+pub async fn check_for_updates_backend(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    
+    let updater = match app.updater_builder().build() {
+        Ok(u) => u,
+        Err(e) => return Err(format!("Impossible d'initialiser l'updater: {}", e)),
+    };
+
+    match updater.check().await {
+        Ok(Some(update)) => {
+            Ok(serde_json::json!({
+                "available": true,
+                "version": update.version,
+                "body": update.body,
+                "current_version": update.current_version,
+            }))
+        }
+        Ok(None) => {
+            Ok(serde_json::json!({
+                "available": false,
+                "version": null,
+                "body": null,
+                "current_version": "2.0.0",
+            }))
+        }
+        Err(e) => {
+            Err(format!("Erreur lors de la vérification de mise à jour: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn install_update_backend(app: tauri::AppHandle) -> Result<bool, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    
+    let updater = match app.updater_builder().build() {
+        Ok(u) => u,
+        Err(e) => return Err(format!("Impossible d'initialiser l'updater: {}", e)),
+    };
+
+    match updater.check().await {
+        Ok(Some(update)) => {
+            update.download_and_install(|_, _| {}, || {}).await
+                .map_err(|e| format!("Erreur de téléchargement et installation: {}", e))?;
+            Ok(true)
+        }
+        Ok(None) => Ok(false),
+        Err(e) => Err(format!("Erreur lors de la vérification préalable: {}", e)),
+    }
+}
+
+
