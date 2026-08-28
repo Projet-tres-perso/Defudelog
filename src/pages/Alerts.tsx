@@ -79,10 +79,10 @@ export default function Alerts() {
       </div>
 
       {/* Filters Bar */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="text-2xs font-semibold text-surface-400 uppercase tracking-wider w-20">Sévérité :</span>
-          <div className="flex gap-2">
+      <div className="space-y-3 bg-surface-900/60 p-3.5 rounded-xl border border-surface-800">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <span className="text-2xs font-semibold text-surface-400 uppercase tracking-wider w-20 shrink-0">Sévérité :</span>
+          <div className="flex flex-wrap gap-1.5">
             {(["", "high", "moderate", "low", "benign"] as const).map((level) => (
               <button
                 key={level}
@@ -97,9 +97,9 @@ export default function Alerts() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-2xs font-semibold text-surface-400 uppercase tracking-wider w-20">Menace :</span>
-          <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <span className="text-2xs font-semibold text-surface-400 uppercase tracking-wider w-20 shrink-0">Menace :</span>
+          <div className="flex flex-wrap gap-1.5">
             <button
               onClick={() => setCategoryFilter("")}
               className={`btn text-xs px-3 py-1.5 ${categoryFilter === "" ? "btn-primary" : "btn-ghost"}`}
@@ -113,12 +113,12 @@ export default function Alerts() {
                 <button
                   key={cat}
                   onClick={() => setCategoryFilter(cat)}
-                  className={`btn text-xs px-3 py-1.5 flex items-center gap-1.5 ${
+                  className={`btn text-xs px-3 py-1.5 flex items-center gap-1.5 whitespace-nowrap ${
                     categoryFilter === cat ? "btn-primary" : "btn-ghost"
                   }`}
                 >
-                  <CatIcon size={14} />
-                  {catConf.label}
+                  <CatIcon size={14} className="shrink-0" />
+                  <span>{catConf.label}</span>
                 </button>
               );
             })}
@@ -127,7 +127,7 @@ export default function Alerts() {
       </div>
 
       {/* Alert list */}
-      <div className="flex-1 overflow-hidden flex gap-4 min-h-0">
+      <div className="flex-1 overflow-hidden flex flex-col lg:flex-row gap-4 min-h-0">
         <div className="flex-1 overflow-auto card p-0">
           {filteredAlerts.length === 0 ? (
             <div className="p-8 text-center text-surface-500">
@@ -143,45 +143,48 @@ export default function Alerts() {
               return (
                 <div
                   key={alert.id}
-                  className={`flex items-center gap-4 px-4 py-3 border-b border-surface-800 cursor-pointer hover:bg-surface-800/50 transition-colors ${
+                  className={`flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3.5 border-b border-surface-800 cursor-pointer hover:bg-surface-800/50 transition-colors ${
                     !alert.acknowledged ? "bg-surface-800/30" : ""
                   }`}
                   onClick={() => setSelectedAlert(alert)}
                 >
-                  <Icon size={18} className={config.className.replace("badge-", "text-")} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium truncate">
-                        {alert.template || alert.reasons[0] || "Alerte de sécurité"}
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <Icon size={18} className={`${config.className.replace("badge-", "text-")} shrink-0`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                        <p className="text-sm font-medium truncate" title={alert.template || alert.reasons[0]}>
+                          {alert.template || alert.reasons[0] || "Alerte de sécurité"}
+                        </p>
+                        <span className={`px-2 py-0.5 text-3xs font-semibold rounded-full border ${catConf.color} flex items-center gap-1 shrink-0 whitespace-nowrap`}>
+                          <CatIcon size={10} className="shrink-0" />
+                          {catConf.label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-surface-500 mt-0.5 flex items-center gap-2">
+                        <Clock size={12} className="shrink-0" />
+                        <span>{new Date(alert.detected_at).toLocaleString("fr-FR")}</span>
                       </p>
-                      <span className={`px-2 py-0.5 text-3xs font-semibold rounded-full border ${catConf.color} flex items-center gap-1`}>
-                        <CatIcon size={10} />
-                        {catConf.label}
-                      </span>
                     </div>
-                    <p className="text-xs text-surface-500 mt-0.5 flex items-center gap-2">
-                      <Clock size={12} />
-                      {new Date(alert.detected_at).toLocaleString("fr-FR")}
-                    </p>
                   </div>
-                  <span className={config.className}>{config.label}</span>
-                  <div className="text-right">
-                    <span className="text-sm font-mono font-medium">
+
+                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                    <span className={`${config.className} shrink-0 whitespace-nowrap`}>{config.label}</span>
+                    <span className="text-sm font-mono font-medium text-surface-200 shrink-0">
                       {(alert.final_score * 100).toFixed(0)}%
                     </span>
+                    {!alert.acknowledged && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          acknowledge(alert.id);
+                        }}
+                        className="btn-ghost text-xs text-emerald-400 p-1.5 rounded-lg hover:bg-emerald-500/10 shrink-0"
+                        title="Acquitter l'alerte"
+                      >
+                        <CheckCircle size={15} />
+                      </button>
+                    )}
                   </div>
-                  {!alert.acknowledged && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        acknowledge(alert.id);
-                      }}
-                      className="btn-ghost text-xs text-emerald-400"
-                      title="Acquitter l'alerte"
-                    >
-                      <CheckCircle size={14} />
-                    </button>
-                  )}
                 </div>
               );
             })

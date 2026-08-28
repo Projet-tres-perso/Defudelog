@@ -270,14 +270,14 @@ export default function Dashboard() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="card flex items-start justify-between">
             <div>
               <p className="stat-label">{label}</p>
               <p className="stat-value mt-1 tabular-nums">{value.toLocaleString()}</p>
             </div>
-            <div className={`p-2 rounded-lg ${bg}`}>
+            <div className={`p-2.5 rounded-xl ${bg} shrink-0`}>
               <Icon size={20} className={color} />
             </div>
           </div>
@@ -285,28 +285,35 @@ export default function Dashboard() {
       </div>
 
       {/* Threat Category Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {threatCategories.map(({ key, label, icon: Icon, color, bg, border }) => {
           const count = categoryCounts[key] || 0;
           return (
-            <div key={key} className={`card flex items-center justify-between border ${border} ${bg}`}>
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-surface-900/60">
+            <div key={key} className={`card flex flex-col justify-between border ${border} ${bg} p-4 space-y-3 transition-all hover:scale-[1.01]`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="p-2 rounded-lg bg-surface-900/80 border border-surface-700/50 shrink-0">
                   <Icon size={18} className={color} />
                 </div>
-                <div>
-                  <p className="text-xs text-surface-400 font-medium">{label}</p>
-                  <p className="text-lg font-bold tabular-nums mt-0.5">{count}</p>
-                </div>
+                {count > 0 ? (
+                  <span className="badge bg-red-500/20 text-red-400 text-2xs font-semibold px-2 py-0.5 rounded-full border border-red-500/30 animate-pulse shrink-0">
+                    DÉTECTÉ
+                  </span>
+                ) : (
+                  <span className="badge bg-emerald-500/15 text-emerald-300 text-2xs font-semibold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1 shrink-0">
+                    <ShieldCheck size={12} className="text-emerald-400" />
+                    SAIN
+                  </span>
+                )}
               </div>
-              {count > 0 ? (
-                <span className="badge bg-red-500/20 text-red-400 text-2xs animate-pulse">Détecté</span>
-              ) : (
-                <span className="badge bg-emerald-500/10 text-emerald-400 text-2xs flex items-center gap-1">
-                  <ShieldCheck size={12} />
-                  Sain
-                </span>
-              )}
+
+              <div>
+                <p className="text-xs text-surface-300 font-medium leading-snug line-clamp-2 min-h-[2rem] flex items-center">
+                  {label}
+                </p>
+                <p className="text-2xl font-bold font-mono tabular-nums text-white mt-1">
+                  {count}
+                </p>
+              </div>
             </div>
           );
         })}
