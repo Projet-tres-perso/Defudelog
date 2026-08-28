@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, DetectionSettings, KafkaSettings, LlmSettings, RetentionSettings, PurgeResult, LanServerStatus } from "@/types";
 import InfoTooltip from "@/components/InfoTooltip";
 import { check } from "@tauri-apps/plugin-updater";
-import { Save, RotateCcw, Send, Bell, Eye, EyeOff, Brain, Check, X, Server, Trash2, Archive, Database, Sparkles, ShieldCheck, RefreshCw, ExternalLink, Copy, CheckCheck, Globe, HelpCircle } from "lucide-react";
+import { Save, RotateCcw, Send, Bell, Eye, EyeOff, Brain, Check, X, Server, Trash2, Archive, Database, Sparkles, ShieldCheck, RefreshCw, ExternalLink, Copy, CheckCheck, Globe, HelpCircle, Activity } from "lucide-react";
 
 export default function Configuration() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -1073,6 +1073,40 @@ export default function Configuration() {
                 >
                   <RefreshCw size={13} />
                   Mettre à jour depuis GitHub (OTA)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Mini-Widget Bureau Flottant (HUD) */}
+          <div className="card space-y-4 border border-surface-700/80 bg-surface-900/40">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <Activity size={16} className="text-cyan-400" />
+                  <span>Mini-Widget Bureau Flottant (HUD)</span>
+                </h3>
+                <p className="text-2xs text-surface-400 mt-1">
+                  Affiche un cadran miniature translucide déplaçable sur votre bureau avec le flux en direct et les compteurs de menaces.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => invoke("toggle_desktop_widget", { show: true })}
+                  className="btn-primary text-xs px-3.5 py-2 flex items-center gap-1.5 shadow-md shadow-primary-600/20"
+                >
+                  <Sparkles size={14} />
+                  <span>Afficher le Mini-Widget</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => invoke("toggle_desktop_widget", { show: false })}
+                  className="btn-secondary text-xs px-3 py-2 flex items-center gap-1.5 text-surface-400 hover:text-white"
+                >
+                  <X size={14} />
+                  <span>Masquer</span>
                 </button>
               </div>
             </div>
