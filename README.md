@@ -1,4 +1,4 @@
-# DefuDelog v2.3 — Détection de risque de Fuite de Données, SIEM Sémantique & Réponse aux Incidents
+# DefuDelog v2.3 — Détection de Risque de Fuite de Données, SIEM Sémantique & Réponse aux Incidents
 
 [![Release](https://img.shields.io/github/v/release/Projet-tres-perso/Defudelog?style=flat-square&color=blue)](https://github.com/Projet-tres-perso/Defudelog/releases)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/Projet-tres-perso/Defudelog/release.yml?branch=main&style=flat-square)](https://github.com/Projet-tres-perso/Defudelog/actions)
@@ -6,112 +6,98 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-24C8D8?style=flat-square&logo=tauri)](https://tauri.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-**DefuDelog v2.3** est une plateforme de détection des risques de fuite de données (DLP), d'analyse sémantique de journaux d'événements et de réponse aux incidents (SIEM/SOAR). Conçue en **Rust** et **Tauri/React**, elle combine une analyse multi-couches à haute cadence ($> 20\,000\text{ logs/s}$), une vulgarisation sémantique multi-niveaux en français clair accessible aux équipes métiers et aux analystes SOC, et un respect absolu de la confidentialité des données (fonctionnement 100% autonome et local).
+**DefuDelog v2.3** est une plateforme de détection des risques de fuite de données (DLP), d'analyse sémantique de journaux d'événements et de réponse aux incidents (SIEM/SOAR). Conçue en **Rust** et **Tauri v2 / React**, elle combine une analyse multi-couches à haute cadence ($> 20\,000\text{ logs/s}$), une vulgarisation sémantique multi-niveaux en français clair accessible aux équipes métiers et aux analystes SOC, un mini-widget bureau flottant (HUD) et un respect absolu de la confidentialité des données (fonctionnement 100% autonome et local).
 
 ---
 
-## 🌟 Points Forts & Nouveautés Majeures (v2.3)
+## 🌟 Nouveautés Majeures & Expérience Utilisateur (v2.3)
 
--  **Moteur Sémantique Enrichi & Multi-Niveaux** :
-  - **1. Sens Métier Immédiat (`meaning`)** : Résumé clair de l'événement en une phrase compréhensible par tous.
-  - **2. Explication Didactique Détaillée (`explanation`)** : Contexte technique vulgarisé expliquant la cause de l'événement.
-  - **3. Recommandation Opérationnelle SOC (`recommendation`)** : Actions immédiates suggérées pour sécuriser le poste ou le serveur.
--  **Variables Nommées Typées & Zéro Inversion** :
-  - Extraction automatique sans inversion par expressions régulières typées : `{user}`, `{ip}`, `{port}`, `{file}`, `{table}`, `{status}`, `{app}`, `{domain}`, `{cmd}`.
--  **Correspondance Floue (*Fuzzy Token Jaccard*)** :
-  - Tolérance aux variations mineures de syntaxe ou de versions logicielles avec calcul de similarité de Jaccard ($J \ge 0.70$).
--  **Boucle de Rétroaction & Personnalisation Locale** :
-  - Édition et correction d'une interprétation en 1 clic directement dans l'interface, enregistrée instantanément dans la base SQLite locale (`template_translations`).
--  **Mise à Jour OTA du Dictionnaire** :
-  - Téléchargement et synchronisation à chaud du dictionnaire sémantique depuis GitHub Releases sans recompiler l'application.
--  **Flux Direct Haute Performance & Pagination Intelligente** :
-  - Ingestion bufferisée par lots (batching à 350 ms) garantissant 60 FPS constants sans ralentissement de l'interface.
-  - **Auto-Freeze** : Le flux se fige automatiquement dès que vous feuilletez les pages d'historique, avec un bouton `[ Reprendre le Direct]` pour reconnecter le temps réel.
--  **Mises à Jour Logicielles Automatiques OTA** :
-  - Détection automatique des nouvelles versions publiées sur GitHub avec pastille lumineuse et redémarrage en 1 clic.
-  - **Zéro Perte de Données Garantie** : La base de données SQLite locale (`defudelog.db`), les règles personnalisées et les historiques restent 100% préservés.
--  **Console Web LAN Distante Embarquée** : Accès au tableau de bord depuis n'importe quel terminal du réseau local via clé de sécurité et contrôle d'accès RBAC (Admin vs Analyste).
--  **DLP & Détection Multi-Axes** : Moteur déterministe par signatures, modèle ONNX BGE sémantique local, clustering HDBSCAN des anomalies et intégration LLM locale (Ollama / LM Studio).
+-  **Mini-Widget Bureau Flottant (Desktop HUD)** :
+  - Fenêtre miniature translucide *Glassmorphism* (340 × 235 px), frameless et déplaçable à la souris sur votre bureau.
+  - Bouton d'épingle (*Always on Top*) et pastille de statut `LIVE` en direct.
+  - Mini-courbe dynamique (Sparkline SVG) du débit de logs/s en temps réel.
+  - Grille 2×2 des compteurs de menaces avec interaction au clic : *Risque de fuite*, *Authentification*, *Anomalies système*, *Privilèges*.
+-  **Assistant Pas-à-Pas (*Quick-Setup Wizard*)** :
+  - Configuration guidée en 4 étapes simples : diagnostic OS & UAC, activation des sources en 1 clic (Windows Events, Syslog UDP 514, dossiers applicatifs), calibrage de l'IA HDBSCAN, et démarrage avec/sans jeu d'essai.
+- ⌨ **Palette de Commandes Globale (`Ctrl + F` / `Cmd + F` / `Ctrl + K`)** :
+  - Pilotage instantané au clavier pour naviguer, lancer des actions rapides (ouvrir le HUD, injecter des logs démo, purger) ou rechercher universellement dans les logs.
+-  **Mise en Surbrillance Automatique (*Smart Entity Highlighting*)** :
+  - Un clic sur une adresse IP ou un nom d'hôte dans le visualiseur illumine immédiatement toutes les occurrences identiques visibles dans la liste, avec bouton d'action contextuelle *« Filtrer uniquement sur cette entité »*.
+-  **Moteur Sémantique Multi-Niveaux & Dictionnaire Enrichi** :
+  - Interprétation didactique à 3 niveaux : **1. Sens Métier Court**, **2. Explication Didactique**, **3. Action & Recommandation SOC**.
+  - Intégration des modèles de diagnostics Windows PowerShell (`Get-WinEvent`, `EventLogException`).
+-  **Mises à Jour Automatiques OTA avec Fallback GitHub API** :
+  - Double vérification transparente via le plugin natif et l'API GitHub Releases publique, avec bouton de téléchargement & installation directe.
 
 ---
 
 ##  Comment Utiliser DefuDelog (Guide Pratique)
 
 ### 1.  Tableau de Bord (Dashboard)
-- **Surveillance en temps réel** : Dès l'ouverture, DefuDelog surveille vos sources de collecte locales ou réseau.
+- **Surveillance en temps réel** : Suivi du débit d'ingestion, répartition des menaces par sévérité et séries temporelles interactives.
+- **Raccourci rapide** : Cliquez sur **`[Commandes (Ctrl+F)]`** ou **`[Widget Bureau HUD]`** pour piloter l'application.
 - **Contrôle du flux** :
-  - Cliquez sur **`[Pause]`** pour suspendre le défilement et inspecter une ligne suspecte.
-  - Utilisez les boutons **`[< Précédent]`** et **`[Suivant >]`** pour naviguer dans l'historique paginé.
-  - Cliquez sur **`[ Reprendre le Direct]`** pour réactiver le flux temps réel instantanément.
-- **Filtres par source** : Basculez entre les événements **Locaux** et **Réseau (IP)** en un clic.
+  - Bouton **`[Pause]`** pour figer l'affichage.
+  - Bouton **`[ Reprendre le Direct]`** pour réactiver le flux temps réel.
 
 ### 2.  Explorateur de Logs & Analyse Multi-Niveaux (LogViewer)
-- **Mode Sémantique / Vulgarisé** :
-  - Cochez **«  Cacher les logs bruts »** pour ne lire que la vulgarisation en français clair.
-  - Les badges de statut indiquent visuellement la nature de l'événement : 🟢 **Succès**, 🔵 **Information**, ⚠️ **Avertissement**, 🔴 **Critique**.
-- **Investigation Multi-Niveaux** :
-  - Cliquez sur n'importe quel log pour ouvrir le volet d'investigation latérale affichant :
-    1. Le **Sens Métier Immédiat**
-    2. L'**Explication Didactique Détaillée**
-    3. L'**Action & Recommandation SOC**
-    4. La **Storyline Chronologique ($\pm 10$ logs)**
-- **Personnalisation d'une Interprétation** :
-  - Cliquez sur **`[ Modifier]`** pour ajuster le texte explicatif ou la recommandation d'un gabarit et sauvegarder la règle personnalisée dans SQLite.
+- **Mode Sémantique / Hybride** : Basculez entre vue brute + explication vulgarisée ou vue vulgarisée uniquement.
+- **Surbrillance Intelligente** : Cliquez sur n'importe quel badge d'IP ou de machine pour mettre en évidence toutes ses occurrences.
+- **Volet d'Investigation Latérale** : Affiche les 3 niveaux d'explication, la recommandation SOC et la storyline ($\pm 10$ logs voisins).
+- **Personnalisation Locale** : Bouton **`[✏️ Modifier]`** pour ajuster ou enrichir l'interprétation d'un log et l'enregistrer dans SQLite.
 
 ### 3.  Gestion des Alertes (Alerts)
-- Lorsqu'une fuite de données, une élévation de privilèges ou une tentative d'intrusion est détectée, une alerte est qualifiée avec son niveau de sévérité (**High**, **Moderate**, **Low**).
-- Cliquez sur une alerte pour afficher :
-  - L'explication générée par le moteur IA / SOC.
-  - Les logs bruts associés qui ont déclenché la détection.
-  - Le score d'anomalie composite.
-- Acquittez ou classez l'alerte pour tenir à jour votre journal d'incidents.
+- Qualification automatique du niveau de gravité (🔴 **High**, 🟠 **Moderate**, 🟡 **Low**).
+- Affichage du motif d'anomalie HDBSCAN / BGE, des logs déclencheurs et déclenchement automatique des webhooks Slack/Discord/Teams ou scripts SOAR.
 
 ### 4.  Sources de Collecte (Sources)
-- **Détection Automatique** : Cliquez sur **« Détection automatique des sources »** pour ajouter en 1 clic les journaux système de votre système d'exploitation.
-- **Ajout Manuel de Fichiers** : Surveillez des fichiers spécifiques (fichiers Apache `/var/log/apache2/access.log`, NGINX `/var/log/nginx/error.log`, PostgreSQL, MySQL ou applications métiers).
-- **Serveur Syslog Réseau (UDP/TCP)** : Activez l'écoute Syslog sur le port standard (ex: `514` ou `1514`) pour centraliser les logs de vos pare-feux, commutateurs, routeurs et serveurs distants.
+- **Journaux Windows** : Security (EventID 4624/4625), Application, System.
+- **Serveur Syslog Réseau (UDP/TCP)** : Centralisation sur le port 514 des pare-feux et serveurs Linux.
+- **Surveillance de Fichiers** : Suivi temps réel des fichiers applicatifs Apache, NGINX, BDD.
 
 ### 5.  Configuration & Mises à Jour (Configuration)
-- **Dictionnaire Sémantique** : Consultez les règles actives ou cliquez sur **`[Mettre à jour depuis GitHub (OTA)]`** pour synchroniser instantanément les dernières règles publiées.
-- **IA Locale** : Connectez votre instance Ollama ou LM Studio locale pour des explications contextuelles de sécurité encore plus riches.
-- **Mises à jour Logicielles OTA** : Cliquez sur **« Vérifier maintenant »** pour contrôler la disponibilité d'une nouvelle version de DefuDelog.
+- **Mini-Widget Bureau** : Boutons d'affichage et de masquage direct du HUD.
+- **Mises à jour OTA** : Vérification manuelle et téléchargement en 1 clic.
+- **Purge Asynchrone** : Purge et archivage JSON optimisés sans ralentissement de l'interface.
 
 ---
 
 ##  Architecture Technique
 
 ```text
-DefuDelog v2.2
-├── 🖥️ Interface Utilisateur Desktop (React 18, TypeScript, Tailwind CSS, Recharts)
-│   ├── Dashboard — Métriques globales, séries temporelles et flux direct paginé
-│   ├── LogViewer — Exploration vulgarisée/hybride et isolation par machine
-│   ├── Alertes — Triages SOC, explications contextuelles et remédiation
-│   ├── Sources — Collecteurs multi-OS (EventLog, unified log, syslog UDP/TCP)
-│   ├── Règles — Moteur de signatures DLP et détection personnalisée
-│   └── Configuration — Paramétrage du moteur, IA locale, dictionnaire et mises à jour OTA
+DefuDelog v2.3
+├──  Interface Desktop (React 18, TypeScript, Tailwind CSS, Recharts)
+│   ├── QuickSetupWizard — Assistant de configuration en 4 étapes
+│   ├── CommandPalette — Palette de commandes globale (Ctrl+F / Ctrl+K)
+│   ├── DesktopWidget — Mini-widget flottant bureau HUD (340x235px, Drag, Sparkline)
+│   ├── Dashboard — Métriques, flux temps réel et séries temporelles
+│   ├── LogViewer — Vulgarisation, surbrillance d'entités et volet SOC
+│   ├── Alertes — Triages, explications contextuelles et SOAR
+│   ├── Sources — Collecteurs multi-OS (EventLog, unified log, Syslog UDP)
+│   └── Configuration — Paramètres, dictionnaire OTA, purge asynchrone et MAJ
 │
-├── 🌐 Console Web Distante LAN (Serveur HTTP Rust Tokio Embarqué)
+├──  Console Web Distante LAN (Tokio HTTP)
 │   ├── Authentification par clé d'accès sécurisée à 7 caractères
 │   └── Contrôle d'accès RBAC (Admin total vs Analyste restreint)
 │
-└── 🦀 Moteur Backend (Rust 100% Natif sous Tauri 2)
-    ├── db.rs — SQLite SQLCipher (WAL, mmap 256 Mo, persistance sécurisée)
-    ├── engine.rs — Détection multi-axes (DLP, Drain 2-Pass, BGE/ONNX, HDBSCAN)
+└──  Moteur Backend (Rust Natif sous Tauri 2)
+    ├── db.rs — SQLite SQLCipher (WAL, mmap 256 Mo, purge non-bloquante)
+    ├── engine.rs — Détection multi-axes (DLP, Drain, BGE/ONNX, HDBSCAN)
     ├── translator.rs — Moteur sémantique O(1) et dictionnaire translations_fr.json
-    ├── collector.rs — Collecteurs multi-OS temps réel
-    ├── syslog_listener.rs — Serveur Syslog réseau asynchrone (Tokio UDP/TCP)
+    ├── collector.rs — Collecteurs multi-OS natifs
+    ├── syslog_listener.rs — Serveur Syslog réseau asynchrone (Tokio UDP 514)
     └── active_response.rs — Déclenchement automatique de remédiation SOAR
 ```
 
 ---
 
-## 📊 Matrice d'Efficacité & Détection
+##  Matrice d'Efficacité & Détection
 
 $$\text{Probabilité Combinée } P(\text{Détection}) = 1 - \prod_{i} (1 - P_i)$$
 
 | Type de Menace / Log | Moteurs Mobilisés | Probabilité | Niveau d'Alerte |
 |---|---|:---:|:---:|
-| **Fuite de Données / Exfiltration (DLP)** | DLP Signatures + BGE Sémantique + Drain + HDBSCAN | **99.8 %** | 🔴 **High** (SOAR Trigger) |
+| **Risque de Fuite de Données (DLP)** | DLP Signatures + BGE Sémantique + Drain + HDBSCAN | **99.8 %** | 🔴 **High** (SOAR & Webhook) |
 | **Élévation de Privilèges** | DLP Signatures + Drain Critical + BGE Sémantique | **99.4 %** | 🔴 **High** |
 | **Attaque Force Brute / Auth** | Corrélation Temporelle + Drain Warning + BGE Profile | **97.6 %** | 🟠 **Moderate** / 🔴 **High** |
 | **Crash / Défaillance Système** | Drain Warning + BGE Sémantique | **94.8 %** | 🟠 **Moderate** |
@@ -120,42 +106,16 @@ $$\text{Probabilité Combinée } P(\text{Détection}) = 1 - \prod_{i} (1 - P_i)$
 
 ---
 
-## Installation & Développement
+## ⌨️ Raccourcis Clavier Principaux
 
-### 1. Prérequis
-- **Rust** (version 1.75+) : `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-- **Node.js** (version 20+) et **npm**.
-- **Outils système** :
-  - **macOS** : `xcode-select --install`
-  - **Linux (Debian/Ubuntu)** : `sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libpcap-dev`
-  - **Windows** : Visual Studio C++ Build Tools et OpenSSL v3.x.
-
-### 2. Démarrage Rapide
-
-```bash
-# 1. Cloner le projet
-git clone https://github.com/Projet-tres-perso/Defudelog.git
-cd Defudelog
-
-# 2. Installer les dépendances
-npm install
-
-# 3. Lancer en mode développement (Hot-Reloading Frontend + Backend)
-npm run start
-
-# 4. Compiler l'exécutable de production autonome
-npm run tauri build
-```
+| Raccourci | Action |
+|---|---|
+| **`Ctrl + F`** ou **`Cmd + F`** | Ouvrir la palette de commandes globale & recherche universelle |
+| **`Ctrl + K`** ou **`Cmd + K`** | Ouvrir la palette de commandes rapide |
+| **`Échap` (`ESC`)** | Fermer la palette de commandes, l'assistant ou les modales |
+| **`1` à `7`** (dans la palette) | Naviguer directement vers un onglet spécifique |
 
 ---
 
-##  Documentation Complémentaire
-
-- [Manuel Pédagogique et Technique Approfondi](Manuel.md)
-- [Architecture & Spécifications Internes](ARCHITECTURE.md)
-
----
-
-## Licence
-
-Ce projet est distribué sous licence open-source [MIT](LICENSE).
+##  Licence
+Distribué sous licence **MIT**. Développé pour la détection proactive des risques de fuite de données et la vulgarisation pédagogique de la cybersécurité.
