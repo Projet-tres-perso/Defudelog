@@ -23,6 +23,8 @@ import Reports from "./pages/Reports";
 import Rules from "./pages/Rules";
 import DesktopWidget from "./pages/DesktopWidget";
 import UpdateNotification from "./components/UpdateNotification";
+import CommandPalette from "./components/CommandPalette";
+import QuickSetupWizard from "./components/QuickSetupWizard";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -37,9 +39,23 @@ const navItems = [
 export default function App() {
   const location = useLocation();
   const [isWidgetWindow, setIsWidgetWindow] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [mlStatus, setMlStatus] = useState<"loading" | "ready" | "error">("ready");
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [availableUpdateVersion, setAvailableUpdateVersion] = useState<string | null>(null);
+
+  // Global Keyboard Shortcuts (Ctrl+F, Cmd+F, Ctrl+K, Cmd+K)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F" || e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setIsPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
 
   useEffect(() => {
     try {
@@ -162,6 +178,20 @@ export default function App() {
         </nav>
 
         <div className="p-3 border-t border-surface-700 space-y-2">
+          {/* Quick Command Palette Button */}
+          <button
+            type="button"
+            onClick={() => setIsPaletteOpen(true)}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold text-surface-300 bg-surface-800/80 border border-surface-700 hover:bg-surface-800 hover:text-white transition-all shadow-sm group"
+            title="Ouvrir la palette de commandes (Ctrl+F / Cmd+F)"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-primary-400 font-mono text-xs">⌘</span>
+              <span>Commandes</span>
+            </div>
+            <span className="text-3xs bg-surface-700 text-surface-300 px-1.5 py-0.5 rounded font-mono">Ctrl+F</span>
+          </button>
+
           {/* Desktop HUD Widget Shortcut Button */}
           <button
             type="button"
@@ -209,6 +239,17 @@ export default function App() {
         </Routes>
         <UpdateNotification />
       </main>
+
+      {/* Global Modals: Command Palette & Quick Setup Wizard */}
+      <CommandPalette
+        isOpen={isPaletteOpen}
+        onClose={() => setIsPaletteOpen(false)}
+        onOpenWizard={() => setIsWizardOpen(true)}
+      />
+      <QuickSetupWizard
+        isOpen={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+      />
     </div>
   );
 }

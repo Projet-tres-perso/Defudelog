@@ -421,14 +421,19 @@ pub fn generate_random_access_key() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn purge_old_logs(
+pub async fn purge_old_logs(
     state: State<'_, AppState>,
     days: u32,
     archive: bool,
     archive_dir: Option<String>,
 ) -> Result<PurgeResult, String> {
     let dir = archive_dir.unwrap_or_else(|| "archives".to_string());
-    state.db.purge_logs(days, archive, &dir).map_err(|e| e.to_string())
+    let db = state.db.clone();
+    tokio::task::spawn_blocking(move || {
+        db.purge_logs(days, archive, &dir).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Erreur thread purge: {}", e))?
 }
 
 // ─── Context & Templates ───────────────────────────
@@ -798,52 +803,81 @@ pub async fn sync_remote_dictionary(
 pub async fn check_for_updates_backend(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     use tauri_plugin_updater::UpdaterExt;
     
-    let updater = match app.updater_builder().build() {
-        Ok(u) => u,
-        Err(e) => return Err(format!("Impossible d'initialiser l'updater: {}", e)),
-    };
-
-    match updater.check().await {
-        Ok(Some(update)) => {
-            Ok(serde_json::json!({
+    // 1. Tentative avec le plugin Updater officiel de Tauri
+    if let Ok(updater) = app.updater_builder().build() {
+        if let Ok(Some(update)) = updater.check().await {
+            return Ok(serde_json::json!({
                 "available": true,
                 "version": update.version,
                 "body": update.body,
                 "current_version": update.current_version,
-            }))
-        }
-        Ok(None) => {
-            Ok(serde_json::json!({
-                "available": false,
-                "version": null,
-                "body": null,
-                "current_version": "2.0.0",
-            }))
-        }
-        Err(e) => {
-            Err(format!("Erreur lors de la vérification de mise à jour: {}", e))
+                "download_url": null,
+            }));
         }
     }
+
+    // 2. Fallback direct via l'API REST GitHub Releases publique
+    let client = reqwest::Client::builder()
+        .user_agent("DefuDelog-Desktop-App")
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let github_url = "https://api.github.com/repos/Projet-tres-perso/Defudelog/releases/latest";
+    match client.get(github_url).send().await {
+        Ok(resp) if resp.status().is_success() => {
+            if let Ok(release_data) = resp.json::<serde_json::Value>().await {
+                let tag_name = release_data["tag_name"].as_str().unwrap_or("").trim_start_matches('v');
+                let body = release_data["body"].as_str().unwrap_or("");
+                let html_url = release_data["html_url"].as_str().unwrap_or("");
+                let current_version = "2.0.0";
+
+                // Comparaison simple de version
+                let is_newer = !tag_name.is_empty() && tag_name != current_version;
+
+                return Ok(serde_json::json!({
+                    "available": is_newer,
+                    "version": if is_newer { tag_name } else { current_version },
+                    "body": body,
+                    "current_version": current_version,
+                    "download_url": html_url,
+                }));
+            }
+        }
+        _ => {}
+    }
+
+    Ok(serde_json::json!({
+        "available": false,
+        "version": null,
+        "body": null,
+        "current_version": "2.0.0",
+        "download_url": null,
+    }))
 }
 
 #[tauri::command]
 pub async fn install_update_backend(app: tauri::AppHandle) -> Result<bool, String> {
     use tauri_plugin_updater::UpdaterExt;
     
-    let updater = match app.updater_builder().build() {
-        Ok(u) => u,
-        Err(e) => return Err(format!("Impossible d'initialiser l'updater: {}", e)),
-    };
-
-    match updater.check().await {
-        Ok(Some(update)) => {
+    if let Ok(updater) = app.updater_builder().build() {
+        if let Ok(Some(update)) = updater.check().await {
             update.download_and_install(|_, _| {}, || {}).await
                 .map_err(|e| format!("Erreur de téléchargement et installation: {}", e))?;
-            Ok(true)
+            return Ok(true);
         }
-        Ok(None) => Ok(false),
-        Err(e) => Err(format!("Erreur lors de la vérification préalable: {}", e)),
     }
+    
+    // Si l'updater natif n'est pas configuré, ouvrir la page des releases
+    let target_url = "https://github.com/Projet-tres-perso/Defudelog/releases/latest";
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("cmd").args(["/C", "start", target_url]).spawn();
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(target_url).spawn();
+    #[cfg(target_os = "linux")]
+    let _ = std::process::Command::new("xdg-open").arg(target_url).spawn();
+
+    Ok(true)
 }
 
 #[tauri::command]

@@ -13,6 +13,7 @@ import {
   Activity,
   ShieldCheck,
   Radio,
+  Zap,
 } from "lucide-react";
 
 export default function DesktopWidget() {
@@ -25,8 +26,25 @@ export default function DesktopWidget() {
     general: 0,
   });
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(true);
-  const [throughputHistory, setThroughputHistory] = useState<number[]>([12, 18, 15, 22, 28, 25, 34, 30, 42, 38, 45, 40]);
+  const [throughputHistory, setThroughputHistory] = useState<number[]>([15, 22, 18, 30, 25, 38, 42, 35, 48, 44, 52, 45, 50]);
+  const [currentTime, setCurrentTime] = useState<string>("");
   const prevTotalLogs = useRef<number | null>(null);
+
+  const handleMouseDown = async (e: React.MouseEvent) => {
+    // Ne pas démarrer le drag si on clique sur un bouton interactif
+    const target = e.target as HTMLElement;
+    if (target.closest("button, input, a, select")) {
+      return;
+    }
+    if (e.buttons === 1) {
+      try {
+        const win = getCurrentWebviewWindow();
+        await win.startDragging();
+      } catch (err) {
+        console.debug("Drag error:", err);
+      }
+    }
+  };
 
   const fetchWidgetData = async () => {
     try {
@@ -61,8 +79,16 @@ export default function DesktopWidget() {
 
   useEffect(() => {
     fetchWidgetData();
-    const interval = setInterval(fetchWidgetData, 2000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchWidgetData, 1500);
+
+    const timeInterval = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString("fr-FR"));
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(timeInterval);
+    };
   }, []);
 
   const handleOpenMainApp = async () => {
@@ -92,7 +118,7 @@ export default function DesktopWidget() {
     }
   };
 
-  // Coordonnées pour tracer la courbe SVG
+  // Coordonnées pour tracer la courbe SVG dynamique
   const maxVal = Math.max(10, ...throughputHistory);
   const points = throughputHistory
     .map((val, idx) => {
@@ -103,28 +129,37 @@ export default function DesktopWidget() {
     .join(" ");
 
   const latestThroughput = throughputHistory[throughputHistory.length - 1] || 0;
+  const totalThreats = categoryCounts.data_leak + categoryCounts.authentication + categoryCounts.system_anomaly + categoryCounts.privilege_escalation;
 
   return (
-    <div className="w-full h-full bg-surface-950/95 backdrop-blur-2xl border border-primary-500/40 rounded-2xl shadow-2xl p-3 flex flex-col justify-between select-none overflow-hidden text-surface-100 font-sans">
+    <div
+      onMouseDown={handleMouseDown}
+      data-tauri-drag-region
+      className="w-full h-full bg-surface-950/95 backdrop-blur-2xl border border-primary-500/50 rounded-2xl shadow-2xl p-3 flex flex-col justify-between select-none overflow-hidden text-surface-100 font-sans cursor-move border-t-primary-400/70"
+    >
       {/* Draggable Header */}
       <div
         data-tauri-drag-region
-        className="flex items-center justify-between cursor-move pb-2 border-b border-surface-800/80 -mx-1 px-1"
+        className="flex items-center justify-between pb-1.5 border-b border-surface-800/80 -mx-1 px-1 cursor-move"
       >
         <div className="flex items-center gap-2" data-tauri-drag-region>
           <div className="p-1 rounded-md bg-primary-500/20 text-primary-400 border border-primary-500/30">
-            <Radio size={13} className="animate-pulse" />
+            <Radio size={12} className="animate-pulse" />
           </div>
           <div>
             <span className="text-xs font-bold tracking-wide text-white flex items-center gap-1.5">
               <span>DefuDelog HUD</span>
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+              <span className="inline-flex items-center gap-1 text-3xs font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                LIVE
+              </span>
             </span>
           </div>
         </div>
 
-        {/* Action Controls */}
+        {/* Right Controls & Clock */}
         <div className="flex items-center gap-1">
+          <span className="text-3xs font-mono text-surface-400 pr-1">{currentTime}</span>
           <button
             type="button"
             onClick={handleToggleAlwaysOnTop}
@@ -155,25 +190,25 @@ export default function DesktopWidget() {
       </div>
 
       {/* Mini Live Sparkline Chart */}
-      <div className="py-1.5">
+      <div className="py-1">
         <div className="flex items-center justify-between text-3xs text-surface-400 mb-1">
           <span className="flex items-center gap-1">
-            <Activity size={10} className="text-cyan-400" />
+            <Activity size={10} className="text-cyan-400 animate-pulse" />
             <span>Débit Flux Temps Réel</span>
           </span>
           <span className="font-mono text-cyan-300 font-semibold">{latestThroughput} logs/s</span>
         </div>
 
-        <div className="h-8 w-full bg-surface-900/60 rounded-lg p-1 border border-surface-800/60 relative overflow-hidden flex items-end">
+        <div className="h-7 w-full bg-surface-900/60 rounded-lg p-0.5 border border-surface-800/60 relative overflow-hidden flex items-end">
           <svg className="w-full h-full overflow-visible" viewBox="0 0 300 30" preserveAspectRatio="none">
             <defs>
               <linearGradient id="sparklineGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.4" />
+                <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.5" />
                 <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
               </linearGradient>
             </defs>
             <polygon points={`0,30 ${points} 300,30`} fill="url(#sparklineGrad)" />
-            <polyline fill="none" stroke="#22d3ee" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" points={points} />
+            <polyline fill="none" stroke="#22d3ee" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
           </svg>
         </div>
       </div>
@@ -181,11 +216,15 @@ export default function DesktopWidget() {
       {/* 2x2 Grid Threat & Anomaly Counters */}
       <div className="grid grid-cols-2 gap-1.5">
         {/* Risque de Fuite */}
-        <div className={`p-1.5 rounded-lg border flex items-center justify-between ${
-          categoryCounts.data_leak > 0
-            ? "bg-red-950/40 border-red-500/40 text-red-300 animate-pulse"
-            : "bg-surface-900/50 border-surface-800 text-surface-300"
-        }`}>
+        <div
+          onClick={handleOpenMainApp}
+          className={`p-1.5 rounded-lg border flex items-center justify-between cursor-pointer transition hover:scale-[1.02] ${
+            categoryCounts.data_leak > 0
+              ? "bg-red-950/50 border-red-500/50 text-red-300 shadow-sm shadow-red-500/20 animate-pulse"
+              : "bg-surface-900/50 border-surface-800/80 text-surface-300"
+          }`}
+          title="Cliquez pour voir les alertes de risque de fuite"
+        >
           <div className="flex items-center gap-1.5 truncate">
             <ShieldAlert size={12} className={categoryCounts.data_leak > 0 ? "text-red-400" : "text-surface-500"} />
             <span className="text-3xs font-medium truncate">Risque Fuite</span>
@@ -194,24 +233,32 @@ export default function DesktopWidget() {
         </div>
 
         {/* Authentification */}
-        <div className={`p-1.5 rounded-lg border flex items-center justify-between ${
-          categoryCounts.authentication > 0
-            ? "bg-amber-950/40 border-amber-500/40 text-amber-300"
-            : "bg-surface-900/50 border-surface-800 text-surface-300"
-        }`}>
+        <div
+          onClick={handleOpenMainApp}
+          className={`p-1.5 rounded-lg border flex items-center justify-between cursor-pointer transition hover:scale-[1.02] ${
+            categoryCounts.authentication > 0
+              ? "bg-amber-950/50 border-amber-500/50 text-amber-300 shadow-sm shadow-amber-500/20"
+              : "bg-surface-900/50 border-surface-800/80 text-surface-300"
+          }`}
+          title="Cliquez pour voir les alertes d'authentification"
+        >
           <div className="flex items-center gap-1.5 truncate">
             <KeyRound size={12} className={categoryCounts.authentication > 0 ? "text-amber-400" : "text-surface-500"} />
-            <span className="text-3xs font-medium truncate">Authentification</span>
+            <span className="text-3xs font-medium truncate">Auth / Brute</span>
           </div>
           <span className="text-xs font-mono font-bold">{categoryCounts.authentication}</span>
         </div>
 
         {/* Anomalies Système */}
-        <div className={`p-1.5 rounded-lg border flex items-center justify-between ${
-          categoryCounts.system_anomaly > 0
-            ? "bg-purple-950/40 border-purple-500/40 text-purple-300"
-            : "bg-surface-900/50 border-surface-800 text-surface-300"
-        }`}>
+        <div
+          onClick={handleOpenMainApp}
+          className={`p-1.5 rounded-lg border flex items-center justify-between cursor-pointer transition hover:scale-[1.02] ${
+            categoryCounts.system_anomaly > 0
+              ? "bg-purple-950/50 border-purple-500/50 text-purple-300 shadow-sm shadow-purple-500/20"
+              : "bg-surface-900/50 border-surface-800/80 text-surface-300"
+          }`}
+          title="Cliquez pour voir les anomalies système"
+        >
           <div className="flex items-center gap-1.5 truncate">
             <Cpu size={12} className={categoryCounts.system_anomaly > 0 ? "text-purple-400" : "text-surface-500"} />
             <span className="text-3xs font-medium truncate">Anomalies</span>
@@ -220,11 +267,15 @@ export default function DesktopWidget() {
         </div>
 
         {/* Élévation Privilèges */}
-        <div className={`p-1.5 rounded-lg border flex items-center justify-between ${
-          categoryCounts.privilege_escalation > 0
-            ? "bg-rose-950/40 border-rose-500/40 text-rose-300"
-            : "bg-surface-900/50 border-surface-800 text-surface-300"
-        }`}>
+        <div
+          onClick={handleOpenMainApp}
+          className={`p-1.5 rounded-lg border flex items-center justify-between cursor-pointer transition hover:scale-[1.02] ${
+            categoryCounts.privilege_escalation > 0
+              ? "bg-rose-950/50 border-rose-500/50 text-rose-300 shadow-sm shadow-rose-500/20"
+              : "bg-surface-900/50 border-surface-800/80 text-surface-300"
+          }`}
+          title="Cliquez pour voir les alertes de privilèges"
+        >
           <div className="flex items-center gap-1.5 truncate">
             <Lock size={12} className={categoryCounts.privilege_escalation > 0 ? "text-rose-400" : "text-surface-500"} />
             <span className="text-3xs font-medium truncate">Privilèges</span>
@@ -234,17 +285,18 @@ export default function DesktopWidget() {
       </div>
 
       {/* Footer Status Bar */}
-      <div className="pt-1.5 border-t border-surface-800/80 flex items-center justify-between text-3xs text-surface-500">
+      <div className="pt-1 border-t border-surface-800/80 flex items-center justify-between text-3xs text-surface-400">
         <span className="flex items-center gap-1">
           <ShieldCheck size={11} className="text-emerald-400" />
-          <span>HDBSCAN + BGE Actif</span>
+          <span className="font-medium">HDBSCAN + BGE Actif</span>
         </span>
         <button
           type="button"
           onClick={handleOpenMainApp}
-          className="text-primary-400 hover:text-primary-300 underline font-medium"
+          className="text-primary-400 hover:text-primary-300 font-semibold flex items-center gap-0.5"
         >
-          Console
+          <span>Console</span>
+          <Zap size={10} className="fill-current" />
         </button>
       </div>
     </div>
