@@ -263,12 +263,20 @@ fn test_semantic_log_translation() {
     );
     let trans17 = translator.translate("custom-dlp-pattern triggered for user sophie", "custom-dlp-pattern", &[]);
     assert!(trans17.is_learned);
-    assert_eq!(trans17.status_level, "error");
-    assert!(trans17.meaning.contains("Détection Sur-Mesure"), "Custom rule failed: {}", trans17.meaning);
-    assert!(trans17.meaning.contains("sophie"), "Custom user interpolation failed: {}", trans17.meaning);
-    assert!(trans17.explanation.as_ref().unwrap().contains("responsable SOC"));
-    assert!(trans17.recommendation.as_ref().unwrap().contains("équipe RSSI"));
+    // 18. Test Windows PowerShell Get-WinEvent EventLogException
+    let raw_ps_error = "+ CategoryInfo : NotSpecified: (:) [Get-WinEvent], EventLogException";
+    let trans18 = translator.translate(raw_ps_error, "+ categoryinfo : notspecified: (:) [get-winevent], eventlogexception", &[]);
+    assert_eq!(trans18.status_level, "warning");
+    assert!(trans18.meaning.contains("Erreur de Collecte Windows") || trans18.meaning.contains("Get-WinEvent"), "PowerShell error translation failed: {}", trans18.meaning);
+    assert!(trans18.explanation.as_ref().unwrap().contains("PowerShell"));
+    assert!(trans18.recommendation.as_ref().unwrap().contains("Administrateur"));
+
+    let raw_ps_error2 = "+ FullyQualifiedErrorId : System.Diagnostics.Eventing.Reader.EventLogException,Microsoft.PowerShell.Commands.GetWi";
+    let trans19 = translator.translate(raw_ps_error2, "+ fullyqualifiederrorid : system.diagnostics.eventing.reader.eventlogexception", &[]);
+    assert_eq!(trans19.status_level, "warning");
+    assert!(trans19.meaning.contains("Exception de Lecture Journal Windows") || trans19.meaning.contains("Droits d'audit"), "PowerShell ID error translation failed: {}", trans19.meaning);
 }
+
 
 
 

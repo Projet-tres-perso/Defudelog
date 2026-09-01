@@ -852,6 +852,8 @@ impl Database {
     /// Purge les anciens logs et alertes au-delà de `older_than_days` avec archivage optionnel
     pub fn purge_logs(&self, older_than_days: u32, archive: bool, archive_dir: &str) -> Result<PurgeResult, AppError> {
         let conn = self.conn.lock();
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(10));
+        
         let cutoff = chrono::Utc::now() - chrono::Duration::days(older_than_days as i64);
         let cutoff_iso = cutoff.to_rfc3339();
         let cutoff_alt = cutoff.format("%Y-%m-%d %H:%M:%S").to_string();
@@ -864,23 +866,24 @@ impl Database {
             let file_name = format!("{}/defudelog_archive_{}.json", archive_dir, timestamp_now);
 
             // Récupérer les logs à archiver
-            let mut stmt = conn.prepare(
-                "SELECT id, source_id, hostname, raw_message, timestamp FROM raw_logs WHERE timestamp < ?1 OR timestamp < ?2"
-            )?;
-            let logs_to_archive: Vec<serde_json::Value> = stmt.query_map(params![cutoff_iso, cutoff_alt], |r| {
-                Ok(serde_json::json!({
-                    "id": r.get::<_, String>(0)?,
-                    "source_id": r.get::<_, String>(1)?,
-                    "hostname": r.get::<_, String>(2)?,
-                    "raw_message": r.get::<_, String>(3)?,
-                    "timestamp": r.get::<_, String>(4)?,
-                }))
-            })?.filter_map(|r| r.ok()).collect();
+            if let Ok(mut stmt) = conn.prepare(
+                "SELECT id, source_id, hostname, raw_message, timestamp FROM raw_logs WHERE timestamp < ?1 OR timestamp < ?2 LIMIT 50000"
+            ) {
+                let logs_to_archive: Vec<serde_json::Value> = stmt.query_map(params![cutoff_iso, cutoff_alt], |r| {
+                    Ok(serde_json::json!({
+                        "id": r.get::<_, String>(0)?,
+                        "source_id": r.get::<_, String>(1)?,
+                        "hostname": r.get::<_, String>(2)?,
+                        "raw_message": r.get::<_, String>(3)?,
+                        "timestamp": r.get::<_, String>(4)?,
+                    }))
+                }).map(|rows| rows.filter_map(|r| r.ok()).collect()).unwrap_or_default();
 
-            if !logs_to_archive.is_empty() {
-                if let Ok(json_str) = serde_json::to_string_pretty(&logs_to_archive) {
-                    if std::fs::write(&file_name, json_str).is_ok() {
-                        archive_file_path = Some(file_name);
+                if !logs_to_archive.is_empty() {
+                    if let Ok(json_str) = serde_json::to_string(&logs_to_archive) {
+                        if std::fs::write(&file_name, json_str).is_ok() {
+                            archive_file_path = Some(file_name);
+                        }
                     }
                 }
             }
@@ -889,14 +892,14 @@ impl Database {
         let purged_logs: u64 = conn.execute(
             "DELETE FROM raw_logs WHERE timestamp < ?1 OR timestamp < ?2",
             params![cutoff_iso, cutoff_alt],
-        )? as u64;
+        ).unwrap_or(0) as u64;
 
         let purged_alerts: u64 = conn.execute(
             "DELETE FROM alerts WHERE detected_at < ?1 OR detected_at < ?2",
             params![cutoff_iso, cutoff_alt],
-        )? as u64;
+        ).unwrap_or(0) as u64;
 
-        // Optimiser SQLite après purge massive
+        // Optimiser SQLite après purge
         let _ = conn.execute("PRAGMA optimize", []);
 
         let message = format!(

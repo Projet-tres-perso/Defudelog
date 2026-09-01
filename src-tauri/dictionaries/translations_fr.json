@@ -926,6 +926,30 @@
     "pattern": "checkpoint complete:",
     "template_format": "🟢 Maintenance PostgreSQL : Point de contrôle sur disque (Checkpoint) terminé avec succès.",
     "status_level": "success"
+  },
+  {
+    "category": "Windows - Erreurs & Diagnostics PowerShell",
+    "pattern": "CategoryInfo : NotSpecified: (:) [Get-WinEvent], EventLogException",
+    "template_format": "⚠️ Erreur de Collecte Windows : Exception PowerShell Get-WinEvent (Accès restreint ou canal de log inaccessible).",
+    "explanation": "PowerShell a tenté d'interroger un canal d'événements Windows (ex: Journal Security ou Sysmon) mais l'accès a été refusé par Windows (UAC) ou le journal n'est pas activé sur ce système.",
+    "recommendation": "Relancez DefuDelog en mode Administrateur (clic droit 'Exécuter en tant qu'administrateur' ou bouton UAC dans l'application) pour autoriser la lecture directe du journal de sécurité.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Erreurs & Diagnostics PowerShell",
+    "pattern": "FullyQualifiedErrorId : System.Diagnostics.Eventing.Reader.EventLogException",
+    "template_format": "⚠️ Exception de Lecture Journal Windows : Droits d'audit insuffisants (EventLogException).",
+    "explanation": "Le sous-système Windows Eventing Reader a refusé l'accès aux logs d'audit. Cette erreur est courante lorsque l'application s'exécute sans les privilèges d'administration requis pour les journaux de sécurité.",
+    "recommendation": "Activez l'élévation Administrateur pour surveiller ce canal ou choisissez un canal standard (Application / Système) accessible sans privilèges restreints.",
+    "status_level": "warning"
+  },
+  {
+    "category": "Windows - Erreurs & Diagnostics PowerShell",
+    "pattern": "Microsoft.PowerShell.Commands.GetWi",
+    "template_format": "⚠️ Commande PowerShell de Collecte de Logs interrompue (Get-WinEvent).",
+    "explanation": "La commande de lecture d'événements PowerShell Get-WinEvent a rencontré une exception d'exécution lors du sondage des événements système.",
+    "recommendation": "Vérifiez que le service système 'Journal d'événements Windows' est actif et accessible avec des droits suffisants.",
+    "status_level": "warning"
   }
 ]
 

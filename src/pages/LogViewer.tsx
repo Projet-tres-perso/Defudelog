@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { RawLog, LogSource } from "@/types";
-import { Search, RefreshCw, ChevronLeft, ChevronRight, Globe, Monitor, BookOpen, Layers, Server, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Search, RefreshCw, ChevronLeft, ChevronRight, Globe, Monitor, BookOpen, Layers, Server, ShieldCheck, ShieldAlert, Sparkles, Filter, X } from "lucide-react";
 
 export default function LogViewer() {
   const [logs, setLogs] = useState<RawLog[]>([]);
@@ -14,6 +14,9 @@ export default function LogViewer() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const perPage = 50;
+
+  // États pour la surbrillance intelligente (Smart Entity Highlighting)
+  const [highlightedToken, setHighlightedToken] = useState<string | null>(null);
 
   // États du modal d'édition sémantique
   const [showEditModal, setShowEditModal] = useState(false);
@@ -212,6 +215,39 @@ export default function LogViewer() {
         </div>
       </div>
 
+      {/* Active Highlight Banner */}
+      {highlightedToken && (
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-primary-950/70 border border-primary-500/50 text-xs text-primary-200 shadow-md animate-fade-in">
+          <div className="flex items-center gap-2">
+            <Sparkles size={14} className="text-yellow-300 animate-pulse" />
+            <span>
+              Surbrillance active sur l'entité : <strong className="text-white font-mono bg-primary-900/80 px-2 py-0.5 rounded border border-primary-500/40">{highlightedToken}</strong>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSearch(highlightedToken);
+                setPage(1);
+              }}
+              className="text-3xs bg-primary-600 hover:bg-primary-500 text-white px-2.5 py-1 rounded font-semibold transition flex items-center gap-1"
+            >
+              <Filter size={11} />
+              <span>Filtrer uniquement sur cette entité</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setHighlightedToken(null)}
+              className="p-1 rounded hover:bg-surface-800 text-surface-400 hover:text-white"
+              title="Désactiver la surbrillance"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Log Feed Display */}
       <div className="flex-1 overflow-hidden flex gap-4 min-h-0">
         <div className="flex-1 overflow-auto card p-0 flex flex-col border border-surface-800">
@@ -232,12 +268,23 @@ export default function LogViewer() {
                 const isSelected = selectedRawLog?.id === log.id;
                 const meaning = log.meaning || log.raw_message;
 
+                // Vérification si ce log contient l'entité surlignée
+                const matchesHighlight = highlightedToken && (
+                  log.raw_message.toLowerCase().includes(highlightedToken.toLowerCase()) ||
+                  log.hostname.toLowerCase().includes(highlightedToken.toLowerCase()) ||
+                  (log.meaning && log.meaning.toLowerCase().includes(highlightedToken.toLowerCase()))
+                );
+
                 return (
                   <div
                     key={log.id}
                     onClick={() => viewContext(log)}
-                    className={`cursor-pointer p-3 hover:bg-surface-800/50 transition-all ${
-                      isSelected ? "bg-primary-500/10 border-l-4 border-l-primary-500 shadow-inner" : ""
+                    className={`cursor-pointer p-3 transition-all ${
+                      matchesHighlight
+                        ? "bg-primary-950/40 border-l-4 border-l-yellow-400 ring-1 ring-primary-500/40 shadow-md"
+                        : isSelected
+                        ? "bg-primary-500/10 border-l-4 border-l-primary-500 shadow-inner"
+                        : "hover:bg-surface-800/50"
                     }`}
                   >
                     {/* Top Metadata Row */}
@@ -252,12 +299,34 @@ export default function LogViewer() {
                         </span>
 
                         {isNet ? (
-                          <span className="text-3xs font-semibold px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 flex items-center gap-1 font-mono">
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setHighlightedToken(log.hostname === highlightedToken ? null : log.hostname);
+                            }}
+                            className={`text-3xs font-semibold px-2 py-0.5 rounded flex items-center gap-1 font-mono cursor-pointer transition ${
+                              highlightedToken === log.hostname
+                                ? "bg-yellow-500/30 text-yellow-200 border border-yellow-400 font-bold ring-2 ring-yellow-400/40"
+                                : "bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 hover:border-cyan-400"
+                            }`}
+                            title="Cliquer pour mettre en surbrillance cette IP partout"
+                          >
                             <Globe size={10} />
                             {log.hostname}
                           </span>
                         ) : (
-                          <span className="text-3xs font-semibold px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 flex items-center gap-1 font-mono">
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setHighlightedToken(log.hostname === highlightedToken ? null : log.hostname);
+                            }}
+                            className={`text-3xs font-semibold px-2 py-0.5 rounded flex items-center gap-1 font-mono cursor-pointer transition ${
+                              highlightedToken === log.hostname
+                                ? "bg-yellow-500/30 text-yellow-200 border border-yellow-400 font-bold ring-2 ring-yellow-400/40"
+                                : "bg-purple-950/80 text-purple-300 border border-purple-800/60 hover:border-purple-400"
+                            }`}
+                            title="Cliquer pour mettre en surbrillance cet hôte partout"
+                          >
                             💻 {log.hostname}
                           </span>
                         )}

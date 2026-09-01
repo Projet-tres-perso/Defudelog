@@ -1169,14 +1169,22 @@ export default function Configuration() {
                     </div>
                     <span className="badge bg-yellow-500/20 text-yellow-300 text-3xs font-mono">Prêt</span>
                   </div>
-                  {updateStatus.body && (
-                    <p className="text-3xs text-surface-300 bg-surface-950/60 p-2 rounded border border-surface-800 leading-relaxed max-h-20 overflow-y-auto">
-                      {updateStatus.body}
-                    </p>
-                  )}
-                  <p className="text-3xs text-emerald-400 font-medium">
-                    ✨ La pastille de téléchargement s'est ouverte en bas à droite de l'écran.
-                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await invoke("install_update_backend");
+                        } catch (err) {
+                          alert("Erreur: " + String(err));
+                        }
+                      }}
+                      className="btn bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3.5 py-1.5 flex items-center gap-1.5 font-bold shadow-md shadow-emerald-600/20"
+                    >
+                      <Sparkles size={13} />
+                      <span>Télécharger & Installer v{updateStatus.version}</span>
+                    </button>
+                  </div>
                 </div>
               )}
 

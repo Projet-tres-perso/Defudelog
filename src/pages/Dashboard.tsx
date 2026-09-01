@@ -226,6 +226,19 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Quick-Setup Wizard Launcher */}
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
+            }}
+            className="btn-secondary text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 border-primary-500/30 text-primary-300 hover:bg-primary-950/40 transition shadow-sm"
+            title="Ouvrir la palette de commandes ou l'assistant (Ctrl+K / Ctrl+F)"
+          >
+            <Zap size={14} className="text-primary-400" />
+            <span>Commandes (Ctrl+F)</span>
+          </button>
+
           <button onClick={fetchAllData} className="btn-ghost p-2 text-surface-400 hover:text-surface-200" title="Rafraîchir">
             <RefreshCw size={16} />
           </button>
