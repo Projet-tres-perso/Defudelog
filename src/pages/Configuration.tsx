@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, DetectionSettings, KafkaSettings, LlmSettings, RetentionSettings, PurgeResult, LanServerStatus } from "@/types";
 import InfoTooltip from "@/components/InfoTooltip";
 import { check } from "@tauri-apps/plugin-updater";
-import { Save, RotateCcw, Send, Bell, Eye, EyeOff, Brain, Check, X, Server, Trash2, Archive, Database, Sparkles, ShieldCheck, RefreshCw, ExternalLink, Copy, CheckCheck, Globe, HelpCircle, Activity } from "lucide-react";
+import { enable as enableAutostart, disable as disableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
+import { Save, RotateCcw, Send, Bell, Eye, EyeOff, Brain, Check, X, Server, Trash2, Archive, Database, Sparkles, ShieldCheck, RefreshCw, ExternalLink, Copy, CheckCheck, Globe, HelpCircle, Activity, Power, Zap } from "lucide-react";
 
 export default function Configuration() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -24,6 +25,9 @@ export default function Configuration() {
 
   const [lanStatus, setLanStatus] = useState<LanServerStatus | null>(null);
   const [copiedLanUrl, setCopiedLanUrl] = useState(false);
+
+  const [autostartActive, setAutostartActive] = useState<boolean>(false);
+  const [autostartLoading, setAutostartLoading] = useState<boolean>(false);
 
   const [updateChecking, setUpdateChecking] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<{
@@ -49,7 +53,29 @@ export default function Configuration() {
     }).catch(console.error);
 
     loadLanStatus();
+
+    isAutostartEnabled()
+      .then((enabled) => setAutostartActive(enabled))
+      .catch((e) => console.debug("Autostart check not supported in this environment:", e));
   }, [loadLanStatus]);
+
+  const handleToggleAutostart = async () => {
+    setAutostartLoading(true);
+    try {
+      if (autostartActive) {
+        await disableAutostart();
+        setAutostartActive(false);
+      } else {
+        await enableAutostart();
+        setAutostartActive(true);
+      }
+    } catch (err: any) {
+      console.error("Erreur toggle autostart:", err);
+      alert("Impossible de modifier le démarrage automatique : " + (err?.message || err));
+    } finally {
+      setAutostartLoading(false);
+    }
+  };
 
   const handleCheckUpdate = async () => {
     setUpdateChecking(true);
@@ -1107,6 +1133,46 @@ export default function Configuration() {
                 >
                   <X size={14} />
                   <span>Masquer</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Démarrage Automatique au Lancement du Système */}
+          <div className="card space-y-4 border border-surface-700/80 bg-surface-900/40">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <Power size={16} className={autostartActive ? "text-emerald-400" : "text-surface-400"} />
+                  <span>Démarrage Automatique du Système</span>
+                  <span className={`badge text-3xs font-semibold ${autostartActive ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-surface-800 text-surface-400 border border-surface-700"}`}>
+                    {autostartActive ? "Activé" : "Désactivé"}
+                  </span>
+                </h3>
+                <p className="text-2xs text-surface-400 mt-1">
+                  Lance DefuDelog silencieusement en arrière-plan (réduit dans la zone de notification) dès l'ouverture de votre session Windows / macOS pour assurer une surveillance DLP ininterrompue.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleToggleAutostart}
+                  disabled={autostartLoading}
+                  className={`btn text-xs px-3.5 py-2 flex items-center gap-1.5 transition-all shadow-md ${
+                    autostartActive
+                      ? "bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                      : "btn-primary shadow-primary-600/20"
+                  }`}
+                >
+                  <Power size={14} className={autostartLoading ? "animate-spin" : ""} />
+                  <span>
+                    {autostartLoading
+                      ? "Configuration..."
+                      : autostartActive
+                      ? "Désactiver l'autostart"
+                      : "Activer au démarrage"}
+                  </span>
                 </button>
               </div>
             </div>
