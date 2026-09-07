@@ -8,6 +8,7 @@
     "shell:default",
     "dialog:default",
     "fs:default",
-    "updater:default"
+    "updater:default",
+    "autostart:default"
   ]
 }

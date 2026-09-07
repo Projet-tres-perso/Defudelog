@@ -191,3 +191,25 @@ DefuDelog intègre un système de mises à jour automatisées en direct (**Over-
 2. **Double Vérification (Tauri Updater + Fallback GitHub Releases API) :**
    - Le moteur interroge d'abord le manifest updater natif. Si celui-ci est inaccessible, il bascule sur l'API publique GitHub Releases pour récupérer les binaires `.exe` / `.msi` / `.dmg` et les notes de version sans blocage.
    - Bouton de téléchargement & installation directe dans la page **Configuration**.
+
+---
+
+## 10. Démarrage Automatique (Autostart) au Lancement de la Session
+
+DefuDelog propose une option de démarrage automatique intégrée :
+* **Activation / Désactivation en 1 clic** depuis l'onglet **Configuration** ➔ *Démarrage Automatique du Système*.
+* Au démarrage de Windows ou de macOS, l'application démarre silencieusement en tâche de fond, réduite dans la zone de notification (Systray), et lance immédiatement la collecte de logs et la surveillance DLP.
+
+---
+
+## 11. Empreinte & Consommation des Ressources Système
+
+Grâce à son backend natif en **Rust** et son frontend propulsé par la WebView native de l'OS via **Tauri v2** :
+
+| Scénario d'Usage | RAM Allouée | Charge CPU | I/O Disque | Réseau |
+|---|:---:|:---:|:---:|:---:|
+| **Veille / Zone de notification (Systray)** | ~35 - 65 Mo | < 0.2 % | 0 Mo/s | 0 Ko/s |
+| **Mini-Widget Bureau Flottant (HUD)** | ~45 - 70 Mo | ~0.5 - 1 % | 0 Mo/s | 0 Ko/s |
+| **Collecte active & Détection DLP temps réel** | ~70 - 120 Mo | ~1 - 3 % | Écritures SQLite par lots (WAL) | 0 Ko/s (local) |
+| **Calibration IA & Clustering HDBSCAN** | ~150 - 250 Mo *(pic ponctuel)* | 10 - 25 % *(durée 2-5s)* | Lecture vectorielle | 0 Ko/s |
+

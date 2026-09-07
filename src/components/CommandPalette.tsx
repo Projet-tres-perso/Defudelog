@@ -18,6 +18,7 @@ import {
   Zap,
   ArrowRight,
   ExternalLink,
+  Info,
   LucideIcon,
 } from "lucide-react";
 
@@ -34,9 +35,10 @@ interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenWizard: () => void;
+  onOpenAbout?: () => void;
 }
 
-export default function CommandPalette({ isOpen, onClose, onOpenWizard }: CommandPaletteProps) {
+export default function CommandPalette({ isOpen, onClose, onOpenWizard, onOpenAbout }: CommandPaletteProps) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -133,6 +135,17 @@ export default function CommandPalette({ isOpen, onClose, onOpenWizard }: Comman
       action: () => {
         onClose();
         onOpenWizard();
+      },
+    },
+    {
+      id: "action-about",
+      title: "À propos de DefuDelog (Architecture, Version, Moteurs & Licence)",
+      category: "Actions Rapides",
+      icon: Info,
+      shortcut: "About",
+      action: () => {
+        onClose();
+        if (onOpenAbout) onOpenAbout();
       },
     },
     {

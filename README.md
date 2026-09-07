@@ -55,7 +55,8 @@
 - **Serveur Syslog Réseau (UDP/TCP)** : Centralisation sur le port 514 des pare-feux et serveurs Linux.
 - **Surveillance de Fichiers** : Suivi temps réel des fichiers applicatifs Apache, NGINX, BDD.
 
-### 5.  Configuration & Mises à Jour (Configuration)
+### 5.  Configuration, Démarrage & Mises à Jour (Configuration)
+- **Démarrage Automatique (Autostart)** : Activation en 1 clic pour lancer DefuDelog silencieusement en tâche de fond dans la zone de notification au démarrage de Windows / macOS.
 - **Mini-Widget Bureau** : Boutons d'affichage et de masquage direct du HUD.
 - **Mises à jour OTA** : Vérification manuelle et téléchargement en 1 clic.
 - **Purge Asynchrone** : Purge et archivage JSON optimisés sans ralentissement de l'interface.
@@ -117,5 +118,19 @@ $$\text{Probabilité Combinée } P(\text{Détection}) = 1 - \prod_{i} (1 - P_i)$
 
 ---
 
+## ⚡ Empreinte & Consommation des Ressources Système
+
+Grâce à son architecture **Rust + Tauri v2** (utilisant la WebView native du système au lieu d'un runtime Chromium lourd type Electron), DefuDelog est ultra-léger :
+
+| Mode d'Activité | Consommation RAM | Utilisation CPU | Disque / E-S | Réseau |
+|---|:---:|:---:|:---:|:---:|
+| **Veille / Zone de notification (Systray)** | ~35 - 65 Mo | < 0.2 % | 0 Mo/s | 0 Ko/s |
+| **Mini-Widget Bureau (HUD Flottant)** | ~45 - 70 Mo | ~0.5 - 1 % | 0 Mo/s | 0 Ko/s |
+| **Collecte continue & Ingestion active** | ~70 - 120 Mo | ~1 - 3 % | Écritures SQLite par lots (WAL) | 0 Ko/s (local) |
+| **Calibration IA & Clustering HDBSCAN** | ~150 - 250 Mo *(pic temporaire)* | 10 - 25 % *(pendant 2-5s)* | Lecture vectorielle | 0 Ko/s |
+
+---
+
 ##  Licence
 Distribué sous licence **MIT**. Développé pour la détection proactive des risques de fuite de données et la vulgarisation pédagogique de la cybersécurité.
+

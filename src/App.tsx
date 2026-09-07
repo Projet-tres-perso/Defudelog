@@ -13,6 +13,7 @@ import {
   FileText,
   ShieldCheck,
   Sparkles,
+  Info,
 } from "lucide-react";
 import Dashboard from "./pages/Dashboard";
 import LogViewer from "./pages/LogViewer";
@@ -25,6 +26,7 @@ import DesktopWidget from "./pages/DesktopWidget";
 import UpdateNotification from "./components/UpdateNotification";
 import CommandPalette from "./components/CommandPalette";
 import QuickSetupWizard from "./components/QuickSetupWizard";
+import AboutModal from "./components/AboutModal";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -41,6 +43,7 @@ export default function App() {
   const [isWidgetWindow, setIsWidgetWindow] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [mlStatus, setMlStatus] = useState<"loading" | "ready" | "error">("ready");
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [availableUpdateVersion, setAvailableUpdateVersion] = useState<string | null>(null);
@@ -219,6 +222,20 @@ export default function App() {
             </NavLink>
           )}
 
+          {/* Bouton À propos */}
+          <button
+            type="button"
+            onClick={() => setIsAboutOpen(true)}
+            className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium text-surface-400 hover:text-surface-200 hover:bg-surface-800/60 transition-all group"
+            title="À propos de DefuDelog (Architecture, Version, Moteurs & Licence)"
+          >
+            <div className="flex items-center gap-2">
+              <Info size={14} className="text-surface-400 group-hover:text-primary-400 transition-colors" />
+              <span>À propos</span>
+            </div>
+            <span className="text-3xs text-surface-500 font-mono">v2.0.0</span>
+          </button>
+
           <div className="flex items-center gap-2 px-3 py-1">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-xs text-surface-400">Monitoring actif</span>
@@ -240,15 +257,20 @@ export default function App() {
         <UpdateNotification />
       </main>
 
-      {/* Global Modals: Command Palette & Quick Setup Wizard */}
+      {/* Global Modals: Command Palette, Quick Setup Wizard & About */}
       <CommandPalette
         isOpen={isPaletteOpen}
         onClose={() => setIsPaletteOpen(false)}
         onOpenWizard={() => setIsWizardOpen(true)}
+        onOpenAbout={() => setIsAboutOpen(true)}
       />
       <QuickSetupWizard
         isOpen={isWizardOpen}
         onClose={() => setIsWizardOpen(false)}
+      />
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
       />
     </div>
   );
