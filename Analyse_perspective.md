@@ -2,7 +2,7 @@
 
 ## 1. Rétrospective : De la v1 (POC Python/Kafka) à la v2.0 (Plateforme Native Rust)
 
-Le projet **eLog** est né d'une volonté d'innover dans la détection des fuites de données en combinant le Machine Learning et les flux de logs.
+Le projet **DefuDelog** est né d'une volonté d'innover dans la détection des risques de fuite de données en combinant le Machine Learning et les flux de logs.
 La version initiale (v1) constituait une preuve de concept (POC) en Python s'appuyant sur un cluster Apache Kafka.
 
 ### Tableau Comparatif v1 vs v2.0
@@ -52,7 +52,7 @@ $$\text{Probabilité Combinée } P(\text{Détection}) = 1 - \prod_{i} (1 - P_i)$
 
 | Type d'Incident / Log Suspect | Moteurs Mobilisés Conjointement | Probabilité de Détection | Décision SOC |
 |---|---|:---:|:---:|
-| **1. Fuite de Données / Exfiltration** (dump DB, upload S3, leak de clés) | DLP Signatures + BGE Sémantique + Drain Critical + HDBSCAN | **99.8 %** | 🔴 **High** (SOAR Trigger) |
+| **1. Risque de Fuite de Données / Exfiltration (DLP)** (dump DB, upload S3, leak de clés) | DLP Signatures + BGE Sémantique + Drain Critical + HDBSCAN | **99.8 %** | 🔴 **High** (SOAR Trigger) |
 | **2. Élévation de Privilèges** (`sudoers`, `chmod 777 /etc/shadow`, root shell) | DLP Signatures + Drain Critical + BGE Sémantique | **99.4 %** | 🔴 **High** |
 | **3. Attaque Force Brute / Auth** (`sshd` burst, credential stuffing) | Corrélation Temporelle + Drain Warning + BGE Auth Profile | **97.6 %** | 🟠 **Moderate** / 🔴 **High** |
 | **4. Défaillance / Crash Système** (OOM killer, panic kernel, segfault) | Drain Warning + BGE Sémantique | **94.8 %** | 🟠 **Moderate** |

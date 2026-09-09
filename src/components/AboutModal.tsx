@@ -91,7 +91,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
               <span>Mission & Philosophie</span>
             </div>
             <p className="text-surface-300 text-2xs leading-relaxed">
-              DefuDelog a été conçu pour allier la puissance d’analyse des SOC d’entreprise (détection des risques de fuite de données, clustering d'anomalies, corrélation multi-sources) avec une vulgarisation pédagogique accessible. Il permet à chaque administrateur et utilisateur de comprendre en temps réel ce qui se passe sur sa machine et son réseau sans jargon obscur.
+              DefuDelog a été conçu par CASKI pour allier la puissance d’analyse des SOC d’entreprise (détection des risques de fuite de données, clustering d'anomalies, corrélation multi-sources) avec une vulgarisation pédagogique accessible. Il permet à chaque administrateur et utilisateur de comprendre en temps réel ce qui se passe sur sa machine et son réseau sans jargon obscur.
             </p>
           </div>
 
